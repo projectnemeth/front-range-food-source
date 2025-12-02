@@ -13,6 +13,8 @@ export default function RequestPage() {
     const [isFormOpen, setIsFormOpen] = useState<boolean | null>(null);
     const [loadingSettings, setLoadingSettings] = useState(true);
     const [items, setItems] = useState("");
+    const [scheduledDate, setScheduledDate] = useState("");
+    const [scheduledTime, setScheduledTime] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const [message, setMessage] = useState("");
 
@@ -50,11 +52,15 @@ export default function RequestPage() {
                 userEmail: user.email,
                 userName: user.displayName,
                 items: items, // In a real app, this might be a structured list
+                scheduledDate: scheduledDate,
+                scheduledTime: scheduledTime,
                 status: "PENDING",
                 createdAt: new Date().toISOString(),
             });
             setMessage("Request submitted successfully!");
             setItems("");
+            setScheduledDate("");
+            setScheduledTime("");
         } catch (err) {
             console.error(err);
             setMessage("Error submitting request.");
@@ -98,6 +104,33 @@ export default function RequestPage() {
                             placeholder="List the food items you are requesting..."
                             required
                         />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-md">
+                        <div>
+                            <label className="label">Pickup Date</label>
+                            <input
+                                type="date"
+                                className="input"
+                                value={scheduledDate}
+                                onChange={(e) => setScheduledDate(e.target.value)}
+                                required
+                                min={new Date().toISOString().split('T')[0]}
+                            />
+                        </div>
+                        <div>
+                            <label className="label">Preferred Time</label>
+                            <select
+                                className="input"
+                                value={scheduledTime}
+                                onChange={(e) => setScheduledTime(e.target.value)}
+                                required
+                            >
+                                <option value="">Select a time...</option>
+                                <option value="Morning (9AM - 12PM)">Morning (9AM - 12PM)</option>
+                                <option value="Afternoon (1PM - 4PM)">Afternoon (1PM - 4PM)</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div className="flex gap-md">

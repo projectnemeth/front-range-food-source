@@ -52,8 +52,11 @@ export default function LoginPage() {
                     </div>
                     <button type="submit" className="btn btn-primary">Login</button>
                 </form>
-                <div className="text-center mt-md text-sm">
-                    Don't have an account? <Link href="/register" style={{ color: "var(--color-primary)" }}>Register here</Link>
+                <div className="text-center mt-md text-sm flex flex-col gap-sm">
+                    <Link href="/forgot-password" style={{ color: "var(--color-text-muted)" }}>Forgot Password?</Link>
+                    <div>
+                        Don't have an account? <Link href="/register" style={{ color: "var(--color-primary)" }}>Register here</Link>
+                    </div>
                 </div>
             </div>
         </div>

@@ -11,12 +11,25 @@ export default function RegisterPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [name, setName] = useState("");
+    const [address, setAddress] = useState("");
+    const [phone, setPhone] = useState("");
+    const [adults, setAdults] = useState(1);
+    const [children, setChildren] = useState(0);
+    const [seniors, setSeniors] = useState(0);
     const [error, setError] = useState("");
+    const [submitting, setSubmitting] = useState(false);
     const router = useRouter();
+
+    const generateFamilyId = () => {
+        // Simple random ID generation: FAM-XXXX
+        const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+        return `FAM-${randomStr}`;
+    };
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         setError("");
+        setSubmitting(true);
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
@@ -24,11 +37,22 @@ export default function RegisterPage() {
             // Update profile with name
             await updateProfile(user, { displayName: name });
 
+            const familyId = generateFamilyId();
+
             // Create user document in Firestore
             await setDoc(doc(db, "users", user.uid), {
                 uid: user.uid,
                 email: user.email,
                 name: name,
+                address: address,
+                phone: phone,
+                familySize: {
+                    adults: Number(adults),
+                    children: Number(children),
+                    seniors: Number(seniors),
+                    total: Number(adults) + Number(children) + Number(seniors)
+                },
+                familyId: familyId,
                 role: "USER", // Default role
                 createdAt: new Date().toISOString(),
             });
@@ -38,16 +62,17 @@ export default function RegisterPage() {
             setError(err.message || "Failed to register.");
             console.error(err);
         }
+        setSubmitting(false);
     };
 
     return (
-        <div className="flex justify-center items-center" style={{ minHeight: "60vh" }}>
-            <div className="card" style={{ width: "100%", maxWidth: "400px" }}>
-                <h1 className="text-xl text-center mb-md">Register</h1>
+        <div className="flex justify-center items-center py-md" style={{ minHeight: "60vh" }}>
+            <div className="card" style={{ width: "100%", maxWidth: "500px" }}>
+                <h1 className="text-xl text-center mb-md">Register Family</h1>
                 {error && <div className="text-center mb-md" style={{ color: "var(--color-error)" }}>{error}</div>}
                 <form onSubmit={handleRegister} className="flex flex-col gap-md">
                     <div>
-                        <label className="label">Full Name</label>
+                        <label className="label">Full Name (Head of Household)</label>
                         <input
                             type="text"
                             className="input"
@@ -74,9 +99,73 @@ export default function RegisterPage() {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
+                            minLength={6}
                         />
                     </div>
-                    <button type="submit" className="btn btn-primary">Register</button>
+                    
+                    <div>
+                        <label className="label">Address</label>
+                        <input
+                            type="text"
+                            className="input"
+                            value={address}
+                            onChange={(e) => setAddress(e.target.value)}
+                            required
+                            placeholder="123 Main St, City, Zip"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="label">Phone Number</label>
+                        <input
+                            type="tel"
+                            className="input"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            required
+                            placeholder="(555) 123-4567"
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-sm">
+                        <div>
+                            <label className="label text-sm">Adults (18-59)</label>
+                            <input
+                                type="number"
+                                className="input"
+                                value={adults}
+                                onChange={(e) => setAdults(Number(e.target.value))}
+                                min={1}
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="label text-sm">Children (0-17)</label>
+                            <input
+                                type="number"
+                                className="input"
+                                value={children}
+                                onChange={(e) => setChildren(Number(e.target.value))}
+                                min={0}
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="label text-sm">Seniors (60+)</label>
+                            <input
+                                type="number"
+                                className="input"
+                                value={seniors}
+                                onChange={(e) => setSeniors(Number(e.target.value))}
+                                min={0}
+                                required
+                            />
+                        </div>
+                    </div>
+
+                    <button type="submit" className="btn btn-primary" disabled={submitting}>
+                        {submitting ? "Registering..." : "Register"}
+                    </button>
                 </form>
                 <div className="text-center mt-md text-sm">
                     Already have an account? <Link href="/login" style={{ color: "var(--color-primary)" }}>Login here</Link>
