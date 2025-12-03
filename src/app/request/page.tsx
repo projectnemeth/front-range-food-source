@@ -11,10 +11,9 @@ export default function RequestPage() {
     const router = useRouter();
 
     const [isFormOpen, setIsFormOpen] = useState<boolean | null>(null);
+    const [scheduleMessage, setScheduleMessage] = useState("");
     const [loadingSettings, setLoadingSettings] = useState(true);
     const [items, setItems] = useState("");
-    const [scheduledDate, setScheduledDate] = useState("");
-    const [scheduledTime, setScheduledTime] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const [message, setMessage] = useState("");
 
@@ -22,10 +21,35 @@ export default function RequestPage() {
     useEffect(() => {
         const unsubscribe = onSnapshot(doc(db, "settings", "global"), (doc) => {
             if (doc.exists()) {
-                setIsFormOpen(doc.data().isFormOpen);
+                const data = doc.data();
+                const manualOpen = data.isFormOpen;
+                const scheduledOpen = data.scheduledOpen;
+                const scheduledClose = data.scheduledClose;
+
+                // Determine if open based on schedule or manual override
+                let open = manualOpen;
+                let msg = "";
+
+                if (scheduledOpen && scheduledClose) {
+                    const now = new Date();
+                    const openDate = new Date(scheduledOpen);
+                    const closeDate = new Date(scheduledClose);
+
+                    if (now < openDate) {
+                        open = false;
+                        msg = `Form will open on ${openDate.toLocaleString()}`;
+                    } else if (now > closeDate) {
+                        open = false;
+                        msg = `Form closed on ${closeDate.toLocaleString()}`;
+                    } else {
+                        open = true;
+                        msg = `Form closes on ${closeDate.toLocaleString()}`;
+                    }
+                }
+
+                setIsFormOpen(open);
+                setScheduleMessage(msg);
             } else {
-                // Default to closed if setting doesn't exist, or maybe open? 
-                // Let's default to CLOSED for safety, admin must open it.
                 setIsFormOpen(false);
             }
             setLoadingSettings(false);
@@ -52,15 +76,11 @@ export default function RequestPage() {
                 userEmail: user.email,
                 userName: user.displayName,
                 items: items, // In a real app, this might be a structured list
-                scheduledDate: scheduledDate,
-                scheduledTime: scheduledTime,
                 status: "PENDING",
                 createdAt: new Date().toISOString(),
             });
             setMessage("Request submitted successfully!");
             setItems("");
-            setScheduledDate("");
-            setScheduledTime("");
         } catch (err) {
             console.error(err);
             setMessage("Error submitting request.");
@@ -75,7 +95,8 @@ export default function RequestPage() {
             <div className="flex justify-center">
                 <div className="card text-center" style={{ maxWidth: "500px" }}>
                     <h2 className="text-xl font-bold mb-md" style={{ color: "var(--color-secondary)" }}>Form Closed</h2>
-                    <p>The food request form is currently closed. Please check back later.</p>
+                    <p>The food request form is currently closed.</p>
+                    {scheduleMessage && <p className="text-sm text-muted mt-sm">{scheduleMessage}</p>}
                     <button onClick={() => router.push("/")} className="btn btn-secondary mt-md">Back to Home</button>
                 </div>
             </div>
@@ -86,6 +107,8 @@ export default function RequestPage() {
         <div className="flex justify-center">
             <div className="card" style={{ width: "100%", maxWidth: "600px" }}>
                 <h1 className="text-2xl font-bold mb-md text-center">Food Request Form</h1>
+
+                {scheduleMessage && <div className="text-center text-sm text-muted mb-md">{scheduleMessage}</div>}
 
                 {message && (
                     <div className={`p-md mb-md rounded ${message.includes("Error") ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}`} style={{ backgroundColor: message.includes("Error") ? "#FEE2E2" : "#D1FAE5", color: message.includes("Error") ? "#991B1B" : "#065F46" }}>
@@ -104,33 +127,6 @@ export default function RequestPage() {
                             placeholder="List the food items you are requesting..."
                             required
                         />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-md">
-                        <div>
-                            <label className="label">Pickup Date</label>
-                            <input
-                                type="date"
-                                className="input"
-                                value={scheduledDate}
-                                onChange={(e) => setScheduledDate(e.target.value)}
-                                required
-                                min={new Date().toISOString().split('T')[0]}
-                            />
-                        </div>
-                        <div>
-                            <label className="label">Preferred Time</label>
-                            <select
-                                className="input"
-                                value={scheduledTime}
-                                onChange={(e) => setScheduledTime(e.target.value)}
-                                required
-                            >
-                                <option value="">Select a time...</option>
-                                <option value="Morning (9AM - 12PM)">Morning (9AM - 12PM)</option>
-                                <option value="Afternoon (1PM - 4PM)">Afternoon (1PM - 4PM)</option>
-                            </select>
-                        </div>
                     </div>
 
                     <div className="flex gap-md">

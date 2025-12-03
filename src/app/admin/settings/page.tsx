@@ -11,6 +11,8 @@ export default function AdminSettings() {
     const { user, profile, loading } = useAuth();
     const router = useRouter();
     const [isFormOpen, setIsFormOpen] = useState(false);
+    const [scheduledOpen, setScheduledOpen] = useState("");
+    const [scheduledClose, setScheduledClose] = useState("");
     const [loadingSettings, setLoadingSettings] = useState(true);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState("");
@@ -30,7 +32,10 @@ export default function AdminSettings() {
             const docRef = doc(db, "settings", "global");
             const docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
-                setIsFormOpen(docSnap.data().isFormOpen);
+                const data = docSnap.data();
+                setIsFormOpen(data.isFormOpen);
+                setScheduledOpen(data.scheduledOpen || "");
+                setScheduledClose(data.scheduledClose || "");
             }
         } catch (err) {
             console.error("Error fetching settings:", err);
@@ -38,19 +43,25 @@ export default function AdminSettings() {
         setLoadingSettings(false);
     };
 
-    const handleToggle = async () => {
+    const handleSave = async () => {
         setSaving(true);
         setMessage("");
         try {
-            const newState = !isFormOpen;
-            await setDoc(doc(db, "settings", "global"), { isFormOpen: newState }, { merge: true });
-            setIsFormOpen(newState);
-            setMessage(`Form is now ${newState ? "OPEN" : "CLOSED"}`);
+            await setDoc(doc(db, "settings", "global"), {
+                isFormOpen,
+                scheduledOpen,
+                scheduledClose
+            }, { merge: true });
+            setMessage("Settings saved successfully.");
         } catch (err) {
             console.error("Error saving settings:", err);
             setMessage("Error saving settings.");
         }
         setSaving(false);
+    };
+
+    const handleManualToggle = () => {
+        setIsFormOpen(!isFormOpen);
     };
 
     if (loading || loadingSettings) return <div className="text-center mt-md">Loading...</div>;
@@ -62,25 +73,71 @@ export default function AdminSettings() {
             <div className="card" style={{ width: "100%", maxWidth: "500px" }}>
                 <h1 className="text-xl font-bold mb-md text-center">Admin Settings</h1>
 
-                <div className="flex flex-col gap-md items-center">
-                    <div className="text-center">
-                        <p className="mb-sm">Current Status:</p>
-                        <div className={`text-2xl font-bold ${isFormOpen ? "text-green-600" : "text-red-600"}`} style={{ color: isFormOpen ? "var(--color-success)" : "var(--color-error)" }}>
-                            {isFormOpen ? "OPEN" : "CLOSED"}
+                <div className="flex flex-col gap-md">
+
+                    {/* Manual Toggle Section */}
+                    <div className="border-b pb-md">
+                        <h3 className="font-bold mb-sm">Manual Control</h3>
+                        <div className="flex items-center justify-between">
+                            <span>Current Manual Status:</span>
+                            <span className={`font-bold ${isFormOpen ? "text-green-600" : "text-red-600"}`} style={{ color: isFormOpen ? "var(--color-success)" : "var(--color-error)" }}>
+                                {isFormOpen ? "OPEN" : "CLOSED"}
+                            </span>
+                        </div>
+                        <button
+                            onClick={handleManualToggle}
+                            className={`btn mt-sm w-full ${isFormOpen ? "btn-secondary" : "btn-primary"}`}
+                        >
+                            {isFormOpen ? "Close Form Manually" : "Open Form Manually"}
+                        </button>
+                        <p className="text-xs text-muted mt-xs">
+                            Note: If a schedule is set below, it will override this manual setting.
+                        </p>
+                    </div>
+
+                    {/* Scheduling Section */}
+                    <div>
+                        <h3 className="font-bold mb-sm">Scheduled Availability</h3>
+                        <div className="flex flex-col gap-sm">
+                            <div>
+                                <label className="label">Opens At</label>
+                                <input
+                                    type="datetime-local"
+                                    className="input"
+                                    value={scheduledOpen}
+                                    onChange={(e) => setScheduledOpen(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="label">Closes At</label>
+                                <input
+                                    type="datetime-local"
+                                    className="input"
+                                    value={scheduledClose}
+                                    onChange={(e) => setScheduledClose(e.target.value)}
+                                />
+                            </div>
+                            <button
+                                onClick={() => { setScheduledOpen(""); setScheduledClose(""); }}
+                                className="text-sm text-red-600 underline text-left"
+                            >
+                                Clear Schedule
+                            </button>
                         </div>
                     </div>
 
-                    <button
-                        onClick={handleToggle}
-                        className={`btn ${isFormOpen ? "btn-secondary" : "btn-primary"}`}
-                        disabled={saving}
-                    >
-                        {saving ? "Saving..." : (isFormOpen ? "Close Form" : "Open Form")}
-                    </button>
+                    <div className="mt-md">
+                        <button
+                            onClick={handleSave}
+                            className="btn btn-primary w-full"
+                            disabled={saving}
+                        >
+                            {saving ? "Saving..." : "Save All Settings"}
+                        </button>
+                        {message && <p className="text-center text-sm mt-sm">{message}</p>}
+                    </div>
 
-                    {message && <p className="text-sm mt-sm">{message}</p>}
-
-                    <Link href="/admin" className="text-sm text-muted mt-md underline">
+                    <Link href="/admin" className="text-sm text-muted mt-sm text-center underline">
                         Back to Dashboard
                     </Link>
                 </div>
