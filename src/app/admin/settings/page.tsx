@@ -7,6 +7,7 @@ import { db } from "@/lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useLanguage } from "@/context/LanguageContext";
+import { startNewBatch } from "@/lib/batchUtils";
 
 export default function AdminSettings() {
     const { user, profile, loading } = useAuth();
@@ -49,6 +50,16 @@ export default function AdminSettings() {
         setSaving(true);
         setMessage("");
         try {
+            // Check if a new scheduled open time is being set
+            const docRef = doc(db, "settings", "global");
+            const docSnap = await getDoc(docRef);
+            const currentScheduledOpen = docSnap.exists() ? docSnap.data().scheduledOpen : "";
+
+            if (scheduledOpen && scheduledOpen !== currentScheduledOpen) {
+                // Start a new batch for the new schedule
+                await startNewBatch("SCHEDULED", scheduledOpen);
+            }
+
             await setDoc(doc(db, "settings", "global"), {
                 isFormOpen,
                 scheduledOpen,
@@ -62,8 +73,43 @@ export default function AdminSettings() {
         setSaving(false);
     };
 
-    const handleManualToggle = () => {
-        setIsFormOpen(!isFormOpen);
+    const handleManualToggle = async () => {
+        const newState = !isFormOpen;
+        setIsFormOpen(newState);
+
+        if (newState) {
+            // If opening manually, start a new batch
+            try {
+                await startNewBatch("MANUAL", new Date().toISOString());
+            } catch (err) {
+                console.error("Error starting batch on manual open:", err);
+                // Continue to save state even if batch fails? Probably better to alert.
+                alert("Error starting new batch. Please try again.");
+                return;
+            }
+        }
+
+        // We need to save this state immediately as per previous logic, or just let the user click save?
+        // The previous logic didn't save on toggle, it just updated local state. 
+        // BUT, the toggle button implies immediate action usually. 
+        // Looking at previous code, it just updated state `setIsFormOpen(!isFormOpen)`.
+        // So the user had to click "Save All Settings".
+        // However, for "Open Form Manually" to be effective immediately, it usually implies a save.
+        // Let's keep it as local state update to be consistent with "Save All Settings" button,
+        // BUT `startNewBatch` writes to DB immediately. This is a bit inconsistent.
+        // If I start a batch but don't save "isFormOpen: true", then we have a batch but closed form.
+        // Ideally, "Open Form Manually" should probably be an immediate action.
+        // Let's make the toggle button save immediately for better UX and consistency with batch creation.
+
+        try {
+            await setDoc(doc(db, "settings", "global"), {
+                isFormOpen: newState
+            }, { merge: true });
+            setMessage(t("settings.savedSuccess"));
+        } catch (err) {
+            console.error("Error saving manual toggle:", err);
+            setMessage(t("settings.saveError"));
+        }
     };
 
     if (loading || loadingSettings) return <div className="text-center mt-md">{t("common.loading")}</div>;

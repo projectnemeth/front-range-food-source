@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, addDoc, collection, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, addDoc, collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/context/LanguageContext";
 
@@ -18,6 +18,8 @@ export default function RequestPage() {
     const [items, setItems] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const [message, setMessage] = useState("");
+    const [currentBatchId, setCurrentBatchId] = useState<string | null>(null);
+    const [hasOrdered, setHasOrdered] = useState(false);
 
     // Check if form is open (Real-time listener)
     useEffect(() => {
@@ -27,6 +29,7 @@ export default function RequestPage() {
                 const manualOpen = data.isFormOpen;
                 const scheduledOpen = data.scheduledOpen;
                 const scheduledClose = data.scheduledClose;
+                setCurrentBatchId(data.currentBatchId || null);
 
                 // Determine if open based on schedule or manual override
                 let open = manualOpen;
@@ -60,6 +63,30 @@ export default function RequestPage() {
         return () => unsubscribe();
     }, [t]);
 
+    // Check if user has already ordered in this batch
+    useEffect(() => {
+        const checkOrder = async () => {
+            if (user && currentBatchId) {
+                try {
+                    const q = query(
+                        collection(db, "orders"),
+                        where("userId", "==", user.uid),
+                        where("batchId", "==", currentBatchId)
+                    );
+                    const snapshot = await getDocs(q);
+                    if (!snapshot.empty) {
+                        setHasOrdered(true);
+                    } else {
+                        setHasOrdered(false);
+                    }
+                } catch (err) {
+                    console.error("Error checking existing orders:", err);
+                }
+            }
+        };
+        checkOrder();
+    }, [user, currentBatchId]);
+
     // Redirect if not logged in
     useEffect(() => {
         if (!authLoading && !user) {
@@ -70,6 +97,10 @@ export default function RequestPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user) return;
+        if (hasOrdered) {
+            setMessage(t("request.alreadyOrdered"));
+            return;
+        }
 
         setSubmitting(true);
         try {
@@ -77,12 +108,14 @@ export default function RequestPage() {
                 userId: user.uid,
                 userEmail: user.email,
                 userName: user.displayName,
-                items: items, // In a real app, this might be a structured list
+                items: items,
                 status: "PENDING",
                 createdAt: new Date().toISOString(),
+                batchId: currentBatchId // Add batch ID
             });
             setMessage(t("request.successMessage"));
             setItems("");
+            setHasOrdered(true); // Prevent immediate re-submission
         } catch (err) {
             console.error(err);
             setMessage(t("request.errorMessage"));
@@ -99,6 +132,18 @@ export default function RequestPage() {
                     <h2 className="text-xl font-bold mb-md" style={{ color: "var(--color-secondary)" }}>{t("request.closedTitle")}</h2>
                     <p>{t("request.closedMessage")}</p>
                     {scheduleMessage && <p className="text-sm text-muted mt-sm">{scheduleMessage}</p>}
+                    <button onClick={() => router.push("/")} className="btn btn-secondary mt-md">{t("common.backToHome")}</button>
+                </div>
+            </div>
+        );
+    }
+
+    if (hasOrdered) {
+        return (
+            <div className="flex justify-center">
+                <div className="card text-center" style={{ maxWidth: "500px" }}>
+                    <h2 className="text-xl font-bold mb-md text-green-700">{t("request.successMessage")}</h2>
+                    <p>{t("request.alreadyOrdered")}</p>
                     <button onClick={() => router.push("/")} className="btn btn-secondary mt-md">{t("common.backToHome")}</button>
                 </div>
             </div>

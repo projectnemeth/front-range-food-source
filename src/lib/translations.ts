@@ -43,20 +43,7 @@ export const translations = {
             success: "Registration successful!",
             failed: "Failed to register.",
         },
-        request: {
-            title: "Food Request Form",
-            closedTitle: "Form Closed",
-            closedMessage: "The food request form is currently closed.",
-            itemsLabel: "What items do you need?",
-            itemsPlaceholder: "List the food items you are requesting...",
-            submitButton: "Submit Request",
-            submitting: "Submitting...",
-            successMessage: "Request submitted successfully!",
-            errorMessage: "Error submitting request.",
-            formOpensOn: "Form will open on",
-            formClosedOn: "Form closed on",
-            formClosesOn: "Form closes on",
-        },
+
         admin: {
             dashboard: "Admin Dashboard",
             settings: "Settings",
@@ -75,6 +62,8 @@ export const translations = {
             markPending: "Mark Pending",
             items: "Items:",
             weekOf: "Week of",
+            selectBatch: "Select Batch",
+            currentBatch: "Current Batch",
         },
         settings: {
             title: "Admin Settings",
@@ -100,6 +89,21 @@ export const translations = {
             sendLink: "Send Reset Link",
             sending: "Sending...",
             success: "Password reset email sent! Check your inbox.",
+        },
+        request: {
+            title: "Food Request Form",
+            closedTitle: "Form Closed",
+            closedMessage: "The food request form is currently closed.",
+            itemsLabel: "What items do you need?",
+            itemsPlaceholder: "List the food items you are requesting...",
+            submitButton: "Submit Request",
+            submitting: "Submitting...",
+            successMessage: "Request submitted successfully!",
+            errorMessage: "Error submitting request.",
+            formOpensOn: "Form will open on",
+            formClosedOn: "Form closed on",
+            formClosesOn: "Form closes on",
+            alreadyOrdered: "You have already submitted an order for this batch.",
         }
     },
     es: {
@@ -159,6 +163,7 @@ export const translations = {
             formOpensOn: "El formulario abrirá el",
             formClosedOn: "El formulario cerró el",
             formClosesOn: "El formulario cierra el",
+            alreadyOrdered: "Ya ha enviado una solicitud para este lote.",
         },
         admin: {
             dashboard: "Panel de Administración",
@@ -178,6 +183,8 @@ export const translations = {
             markPending: "Marcar como Pendiente",
             items: "Artículos:",
             weekOf: "Semana del",
+            selectBatch: "Seleccionar Lote",
+            currentBatch: "Lote Actual",
         },
         settings: {
             title: "Configuración de Administración",
