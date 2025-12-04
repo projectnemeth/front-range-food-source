@@ -5,10 +5,12 @@ import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, addDoc, collection, onSnapshot } from "firebase/firestore";
 import { useRouter } from "next/navigation";
+import { useLanguage } from "@/context/LanguageContext";
 
 export default function RequestPage() {
     const { user, loading: authLoading } = useAuth();
     const router = useRouter();
+    const { t } = useLanguage();
 
     const [isFormOpen, setIsFormOpen] = useState<boolean | null>(null);
     const [scheduleMessage, setScheduleMessage] = useState("");
@@ -37,13 +39,13 @@ export default function RequestPage() {
 
                     if (now < openDate) {
                         open = false;
-                        msg = `Form will open on ${openDate.toLocaleString()}`;
+                        msg = `${t("request.formOpensOn")} ${openDate.toLocaleString()}`;
                     } else if (now > closeDate) {
                         open = false;
-                        msg = `Form closed on ${closeDate.toLocaleString()}`;
+                        msg = `${t("request.formClosedOn")} ${closeDate.toLocaleString()}`;
                     } else {
                         open = true;
-                        msg = `Form closes on ${closeDate.toLocaleString()}`;
+                        msg = `${t("request.formClosesOn")} ${closeDate.toLocaleString()}`;
                     }
                 }
 
@@ -56,7 +58,7 @@ export default function RequestPage() {
         });
 
         return () => unsubscribe();
-    }, []);
+    }, [t]);
 
     // Redirect if not logged in
     useEffect(() => {
@@ -79,25 +81,25 @@ export default function RequestPage() {
                 status: "PENDING",
                 createdAt: new Date().toISOString(),
             });
-            setMessage("Request submitted successfully!");
+            setMessage(t("request.successMessage"));
             setItems("");
         } catch (err) {
             console.error(err);
-            setMessage("Error submitting request.");
+            setMessage(t("request.errorMessage"));
         }
         setSubmitting(false);
     };
 
-    if (authLoading || loadingSettings) return <div className="text-center mt-md">Loading...</div>;
+    if (authLoading || loadingSettings) return <div className="text-center mt-md">{t("common.loading")}</div>;
 
     if (!isFormOpen) {
         return (
             <div className="flex justify-center">
                 <div className="card text-center" style={{ maxWidth: "500px" }}>
-                    <h2 className="text-xl font-bold mb-md" style={{ color: "var(--color-secondary)" }}>Form Closed</h2>
-                    <p>The food request form is currently closed.</p>
+                    <h2 className="text-xl font-bold mb-md" style={{ color: "var(--color-secondary)" }}>{t("request.closedTitle")}</h2>
+                    <p>{t("request.closedMessage")}</p>
                     {scheduleMessage && <p className="text-sm text-muted mt-sm">{scheduleMessage}</p>}
-                    <button onClick={() => router.push("/")} className="btn btn-secondary mt-md">Back to Home</button>
+                    <button onClick={() => router.push("/")} className="btn btn-secondary mt-md">{t("common.backToHome")}</button>
                 </div>
             </div>
         );
@@ -106,35 +108,35 @@ export default function RequestPage() {
     return (
         <div className="flex justify-center">
             <div className="card" style={{ width: "100%", maxWidth: "600px" }}>
-                <h1 className="text-2xl font-bold mb-md text-center">Food Request Form</h1>
+                <h1 className="text-2xl font-bold mb-md text-center">{t("request.title")}</h1>
 
                 {scheduleMessage && <div className="text-center text-sm text-muted mb-md">{scheduleMessage}</div>}
 
                 {message && (
-                    <div className={`p-md mb-md rounded ${message.includes("Error") ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}`} style={{ backgroundColor: message.includes("Error") ? "#FEE2E2" : "#D1FAE5", color: message.includes("Error") ? "#991B1B" : "#065F46" }}>
+                    <div className={`p-md mb-md rounded ${message.includes(t("common.error")) ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}`} style={{ backgroundColor: message.includes(t("common.error")) ? "#FEE2E2" : "#D1FAE5", color: message.includes(t("common.error")) ? "#991B1B" : "#065F46" }}>
                         {message}
                     </div>
                 )}
 
                 <form onSubmit={handleSubmit} className="flex flex-col gap-md">
                     <div>
-                        <label className="label">What items do you need?</label>
+                        <label className="label">{t("request.itemsLabel")}</label>
                         <textarea
                             className="input"
                             rows={5}
                             value={items}
                             onChange={(e) => setItems(e.target.value)}
-                            placeholder="List the food items you are requesting..."
+                            placeholder={t("request.itemsPlaceholder")}
                             required
                         />
                     </div>
 
                     <div className="flex gap-md">
                         <button type="submit" className="btn btn-primary flex-1" disabled={submitting}>
-                            {submitting ? "Submitting..." : "Submit Request"}
+                            {submitting ? t("request.submitting") : t("request.submitButton")}
                         </button>
                         <button type="button" onClick={() => router.push("/")} className="btn btn-secondary">
-                            Cancel
+                            {t("common.cancel")}
                         </button>
                     </div>
                 </form>

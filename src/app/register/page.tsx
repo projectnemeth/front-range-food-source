@@ -6,6 +6,7 @@ import { auth, db } from "@/lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useLanguage } from "@/context/LanguageContext";
 
 const COLORADO_COUNTIES = [
     "Adams", "Alamosa", "Arapahoe", "Archuleta", "Baca", "Bent", "Boulder", "Broomfield", "Chaffee", "Cheyenne",
@@ -32,6 +33,7 @@ export default function RegisterPage() {
     const [error, setError] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const router = useRouter();
+    const { t } = useLanguage();
 
     const generateFamilyId = () => {
         // Simple random ID generation: FAM-XXXX
@@ -78,7 +80,7 @@ export default function RegisterPage() {
 
             router.push("/");
         } catch (err: any) {
-            setError(err.message || "Failed to register.");
+            setError(err.message || t("register.failed"));
             console.error(err);
         }
         setSubmitting(false);
@@ -87,12 +89,12 @@ export default function RegisterPage() {
     return (
         <div className="flex justify-center items-center py-md" style={{ minHeight: "60vh" }}>
             <div className="card" style={{ width: "100%", maxWidth: "500px" }}>
-                <h1 className="text-xl text-center mb-md">Register Family</h1>
+                <h1 className="text-xl text-center mb-md">{t("register.title")}</h1>
                 {error && <div className="text-center mb-md" style={{ color: "var(--color-error)" }}>{error}</div>}
                 <form onSubmit={handleRegister} className="flex flex-col gap-md">
                     <div className="grid grid-cols-2 gap-md">
                         <div>
-                            <label className="label">First Name</label>
+                            <label className="label">{t("register.firstName")}</label>
                             <input
                                 type="text"
                                 className="input"
@@ -102,7 +104,7 @@ export default function RegisterPage() {
                             />
                         </div>
                         <div>
-                            <label className="label">Last Name</label>
+                            <label className="label">{t("register.lastName")}</label>
                             <input
                                 type="text"
                                 className="input"
@@ -114,7 +116,7 @@ export default function RegisterPage() {
                     </div>
 
                     <div>
-                        <label className="label">Email</label>
+                        <label className="label">{t("common.email")}</label>
                         <input
                             type="email"
                             className="input"
@@ -124,7 +126,7 @@ export default function RegisterPage() {
                         />
                     </div>
                     <div>
-                        <label className="label">Password</label>
+                        <label className="label">{t("common.password")}</label>
                         <input
                             type="password"
                             className="input"
@@ -136,7 +138,7 @@ export default function RegisterPage() {
                     </div>
 
                     <div>
-                        <label className="label">Address</label>
+                        <label className="label">{t("register.address")}</label>
                         <input
                             type="text"
                             className="input"
@@ -148,14 +150,14 @@ export default function RegisterPage() {
                     </div>
 
                     <div>
-                        <label className="label">Which county do you live in?</label>
+                        <label className="label">{t("register.county")}</label>
                         <select
                             className="input"
                             value={county}
                             onChange={(e) => setCounty(e.target.value)}
                             required
                         >
-                            <option value="">Select a county...</option>
+                            <option value="">{t("register.selectCounty")}</option>
                             {COLORADO_COUNTIES.map(c => (
                                 <option key={c} value={c}>{c}</option>
                             ))}
@@ -163,7 +165,7 @@ export default function RegisterPage() {
                     </div>
 
                     <div>
-                        <label className="label">Phone Number</label>
+                        <label className="label">{t("register.phone")}</label>
                         <input
                             type="tel"
                             className="input"
@@ -175,20 +177,20 @@ export default function RegisterPage() {
                     </div>
 
                     <div>
-                        <label className="label">Food Bank ID <span className="text-sm font-normal text-muted">(Optional)</span></label>
+                        <label className="label">{t("register.foodBankId")} <span className="text-sm font-normal text-muted">{t("register.optional")}</span></label>
                         <input
                             type="text"
                             className="input"
                             value={foodBankId}
                             onChange={(e) => setFoodBankId(e.target.value)}
-                            placeholder="If you have one, enter it here"
+                            placeholder={t("register.foodBankIdPlaceholder")}
                         />
-                        <p className="text-xs text-muted mt-xs">If you do not have one, one will be assigned to you.</p>
+                        <p className="text-xs text-muted mt-xs">{t("register.foodBankIdHelp")}</p>
                     </div>
 
                     <div className="grid grid-cols-3 gap-sm">
                         <div>
-                            <label className="label text-sm">Adults (18-59)</label>
+                            <label className="label text-sm">{t("register.adults")}</label>
                             <input
                                 type="number"
                                 className="input"
@@ -199,7 +201,7 @@ export default function RegisterPage() {
                             />
                         </div>
                         <div>
-                            <label className="label text-sm">Children (0-17)</label>
+                            <label className="label text-sm">{t("register.children")}</label>
                             <input
                                 type="number"
                                 className="input"
@@ -210,7 +212,7 @@ export default function RegisterPage() {
                             />
                         </div>
                         <div>
-                            <label className="label text-sm">Seniors (60+)</label>
+                            <label className="label text-sm">{t("register.seniors")}</label>
                             <input
                                 type="number"
                                 className="input"
@@ -223,11 +225,11 @@ export default function RegisterPage() {
                     </div>
 
                     <button type="submit" className="btn btn-primary" disabled={submitting}>
-                        {submitting ? "Registering..." : "Register"}
+                        {submitting ? t("register.registering") : t("common.register")}
                     </button>
                 </form>
                 <div className="text-center mt-md text-sm">
-                    Already have an account? <Link href="/login" style={{ color: "var(--color-primary)" }}>Login here</Link>
+                    {t("register.alreadyHaveAccount")} <Link href="/login" style={{ color: "var(--color-primary)" }}>{t("register.loginHere")}</Link>
                 </div>
             </div>
         </div>

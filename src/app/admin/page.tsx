@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, query, orderBy, where, getCountFromServer, doc, updateDoc } from "firebase/firestore";
 import Link from "next/link";
+import { useLanguage } from "@/context/LanguageContext";
 
 interface Order {
     id: string;
@@ -36,6 +37,7 @@ interface DashboardStats {
 export default function AdminDashboard() {
     const { user, profile, loading } = useAuth();
     const router = useRouter();
+    const { t } = useLanguage();
     const [orders, setOrders] = useState<Order[]>([]);
     const [stats, setStats] = useState<DashboardStats>({
         totalOrders: 0,
@@ -161,20 +163,20 @@ export default function AdminDashboard() {
         setUpdatingId(null);
     };
 
-    if (loading || loadingData) return <div className="text-center mt-md">Loading...</div>;
+    if (loading || loadingData) return <div className="text-center mt-md">{t("common.loading")}</div>;
 
     if (profile?.role !== "ADMIN") return null;
 
     return (
         <div>
             <div className="flex justify-between items-center mb-md">
-                <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+                <h1 className="text-2xl font-bold">{t("admin.dashboard")}</h1>
                 <div className="flex gap-sm">
                     <Link href="/admin/settings" className="btn btn-secondary">
-                        Settings
+                        {t("admin.settings")}
                     </Link>
                     <Link href="/admin/print" className="btn btn-primary">
-                        Print View
+                        {t("admin.printView")}
                     </Link>
                 </div>
             </div>
@@ -183,18 +185,18 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-md mb-lg">
                 {/* Card 1: Order Breakdown */}
                 <div className="card">
-                    <h3 className="text-lg font-bold text-muted mb-sm">Order Status</h3>
+                    <h3 className="text-lg font-bold text-muted mb-sm">{t("admin.orderStatus")}</h3>
                     <div className="flex flex-col gap-xs">
                         <div className="flex justify-between">
-                            <span>Total Submitted:</span>
+                            <span>{t("admin.totalSubmitted")}:</span>
                             <span className="font-bold">{stats.totalOrders}</span>
                         </div>
                         <div className="flex justify-between text-green-700">
-                            <span>Filled / Packed:</span>
+                            <span>{t("admin.filledPacked")}:</span>
                             <span className="font-bold">{stats.completedOrders}</span>
                         </div>
                         <div className="flex justify-between text-yellow-700">
-                            <span>To Be Filled:</span>
+                            <span>{t("admin.toBeFilled")}:</span>
                             <span className="font-bold">{stats.pendingOrders}</span>
                         </div>
                     </div>
@@ -202,21 +204,21 @@ export default function AdminDashboard() {
 
                 {/* Card 2: New Registrations */}
                 <div className="card text-center flex flex-col justify-center">
-                    <h3 className="text-lg font-bold text-muted mb-xs">New Families (21 Days)</h3>
+                    <h3 className="text-lg font-bold text-muted mb-xs">{t("admin.newFamilies")}</h3>
                     <p className="text-4xl font-bold text-primary">{stats.newFamilies21Days}</p>
-                    <p className="text-sm text-muted mt-xs">Total Families: {stats.totalFamilies}</p>
+                    <p className="text-sm text-muted mt-xs">{t("admin.totalFamilies")}: {stats.totalFamilies}</p>
                 </div>
 
                 {/* Card 3: 90-Day Weekly Trend */}
                 <div className="card">
-                    <h3 className="text-lg font-bold text-muted mb-sm">Orders (Last 90 Days)</h3>
+                    <h3 className="text-lg font-bold text-muted mb-sm">{t("admin.orders90Days")}</h3>
                     <div className="flex flex-col gap-xs overflow-y-auto" style={{ maxHeight: "150px" }}>
                         {stats.weeklyOrders.length === 0 ? (
-                            <p className="text-sm text-muted">No recent orders.</p>
+                            <p className="text-sm text-muted">{t("admin.noRecentOrders")}</p>
                         ) : (
                             stats.weeklyOrders.map((week) => (
                                 <div key={week.weekStart} className="flex justify-between text-sm">
-                                    <span>Week of {new Date(week.weekStart).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                    <span>{t("admin.weekOf")} {new Date(week.weekStart).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
                                     <span className="font-bold">{week.count}</span>
                                 </div>
                             ))
@@ -225,10 +227,10 @@ export default function AdminDashboard() {
                 </div>
             </div>
 
-            <h2 className="text-xl font-bold mb-md">Recent Orders</h2>
+            <h2 className="text-xl font-bold mb-md">{t("admin.recentOrders")}</h2>
             <div className="flex flex-col gap-md">
                 {orders.length === 0 ? (
-                    <p className="text-center text-muted">No orders found.</p>
+                    <p className="text-center text-muted">{t("admin.noOrdersFound")}</p>
                 ) : (
                     orders.map(order => (
                         <div key={order.id} className="card">
@@ -252,7 +254,7 @@ export default function AdminDashboard() {
                                                 disabled={updatingId === order.id}
                                                 className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 transition-colors"
                                             >
-                                                Mark Completed
+                                                {t("admin.markCompleted")}
                                             </button>
                                         )}
                                         {order.status === 'COMPLETED' && (
@@ -261,14 +263,14 @@ export default function AdminDashboard() {
                                                 disabled={updatingId === order.id}
                                                 className="text-xs bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600 transition-colors"
                                             >
-                                                Mark Pending
+                                                {t("admin.markPending")}
                                             </button>
                                         )}
                                     </div>
                                 </div>
                             </div>
                             <div className="mt-sm">
-                                <h4 className="text-sm font-bold mb-xs">Items:</h4>
+                                <h4 className="text-sm font-bold mb-xs">{t("admin.items")}</h4>
                                 <p className="whitespace-pre-wrap">{order.items}</p>
                             </div>
                         </div>

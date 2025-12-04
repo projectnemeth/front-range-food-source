@@ -4,12 +4,14 @@ import { useState } from "react";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import Link from "next/link";
+import { useLanguage } from "@/context/LanguageContext";
 
 export default function ForgotPasswordPage() {
     const [email, setEmail] = useState("");
     const [message, setMessage] = useState("");
     const [error, setError] = useState("");
     const [submitting, setSubmitting] = useState(false);
+    const { t } = useLanguage();
 
     const handleReset = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -19,7 +21,7 @@ export default function ForgotPasswordPage() {
 
         try {
             await sendPasswordResetEmail(auth, email);
-            setMessage("Password reset email sent! Check your inbox.");
+            setMessage(t("forgotPassword.success"));
         } catch (err: any) {
             console.error(err);
             if (err.code === 'auth/user-not-found') {
@@ -34,30 +36,30 @@ export default function ForgotPasswordPage() {
     return (
         <div className="flex justify-center items-center" style={{ minHeight: "60vh" }}>
             <div className="card" style={{ width: "100%", maxWidth: "400px" }}>
-                <h1 className="text-xl text-center mb-md">Reset Password</h1>
+                <h1 className="text-xl text-center mb-md">{t("forgotPassword.title")}</h1>
 
                 {message && <div className="text-center mb-md" style={{ color: "var(--color-success)" }}>{message}</div>}
                 {error && <div className="text-center mb-md" style={{ color: "var(--color-error)" }}>{error}</div>}
 
                 <form onSubmit={handleReset} className="flex flex-col gap-md">
                     <div>
-                        <label className="label">Email Address</label>
+                        <label className="label">{t("common.email")}</label>
                         <input
                             type="email"
                             className="input"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             required
-                            placeholder="Enter your registered email"
+                            placeholder={t("forgotPassword.instruction")}
                         />
                     </div>
                     <button type="submit" className="btn btn-primary" disabled={submitting}>
-                        {submitting ? "Sending..." : "Send Reset Link"}
+                        {submitting ? t("forgotPassword.sending") : t("forgotPassword.sendLink")}
                     </button>
                 </form>
 
                 <div className="text-center mt-md text-sm">
-                    <Link href="/login" style={{ color: "var(--color-primary)" }}>Back to Login</Link>
+                    <Link href="/login" style={{ color: "var(--color-primary)" }}>{t("common.login")}</Link>
                 </div>
             </div>
         </div>

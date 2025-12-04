@@ -5,12 +5,14 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useLanguage } from "@/context/LanguageContext";
 
 export default function LoginPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const router = useRouter();
+    const { t } = useLanguage();
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -27,11 +29,11 @@ export default function LoginPage() {
     return (
         <div className="flex justify-center items-center" style={{ minHeight: "60vh" }}>
             <div className="card" style={{ width: "100%", maxWidth: "400px" }}>
-                <h1 className="text-xl text-center mb-md">Login</h1>
+                <h1 className="text-xl text-center mb-md">{t("common.login")}</h1>
                 {error && <div className="text-center mb-md" style={{ color: "var(--color-error)" }}>{error}</div>}
                 <form onSubmit={handleLogin} className="flex flex-col gap-md">
                     <div>
-                        <label className="label">Email</label>
+                        <label className="label">{t("common.email")}</label>
                         <input
                             type="email"
                             className="input"
@@ -41,7 +43,7 @@ export default function LoginPage() {
                         />
                     </div>
                     <div>
-                        <label className="label">Password</label>
+                        <label className="label">{t("common.password")}</label>
                         <input
                             type="password"
                             className="input"
@@ -50,12 +52,12 @@ export default function LoginPage() {
                             required
                         />
                     </div>
-                    <button type="submit" className="btn btn-primary">Login</button>
+                    <button type="submit" className="btn btn-primary">{t("common.login")}</button>
                 </form>
                 <div className="text-center mt-md text-sm flex flex-col gap-sm">
-                    <Link href="/forgot-password" style={{ color: "var(--color-text-muted)" }}>Forgot Password?</Link>
+                    <Link href="/forgot-password" style={{ color: "var(--color-text-muted)" }}>{t("home.forgotPassword")}</Link>
                     <div>
-                        Don't have an account? <Link href="/register" style={{ color: "var(--color-primary)" }}>Register here</Link>
+                        {t("home.noAccount")} <Link href="/register" style={{ color: "var(--color-primary)" }}>{t("home.registerHere")}</Link>
                     </div>
                 </div>
             </div>

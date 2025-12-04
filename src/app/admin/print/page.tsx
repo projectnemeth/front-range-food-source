@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { useLanguage } from "@/context/LanguageContext";
 
 interface Order {
     id: string;
@@ -19,6 +20,7 @@ interface Order {
 export default function PrintView() {
     const { user, profile, loading } = useAuth();
     const router = useRouter();
+    const { t } = useLanguage();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loadingOrders, setLoadingOrders] = useState(true);
 
@@ -47,7 +49,7 @@ export default function PrintView() {
         setLoadingOrders(false);
     };
 
-    if (loading || loadingOrders) return <div>Loading...</div>;
+    if (loading || loadingOrders) return <div>{t("common.loading")}</div>;
 
     if (profile?.role !== "ADMIN") return null;
 
@@ -63,15 +65,15 @@ export default function PrintView() {
       `}</style>
 
             <div className="no-print flex justify-between items-center mb-lg p-md bg-gray-100 rounded">
-                <h1 className="text-xl font-bold">Print Preview</h1>
+                <h1 className="text-xl font-bold">{t("admin.printView")}</h1>
                 <div className="flex gap-sm">
                     <button onClick={() => window.print()} className="btn btn-primary">Print</button>
-                    <button onClick={() => router.push("/admin")} className="btn btn-secondary">Back</button>
+                    <button onClick={() => router.push("/admin")} className="btn btn-secondary">{t("common.backToDashboard")}</button>
                 </div>
             </div>
 
             <div>
-                <h1 className="text-2xl font-bold mb-lg text-center">Front Range Food Source - Orders</h1>
+                <h1 className="text-2xl font-bold mb-lg text-center">Front Range Food Source - {t("admin.recentOrders")}</h1>
                 <p className="text-center mb-lg text-muted">Generated on {new Date().toLocaleDateString()}</p>
 
                 {orders.map(order => (
@@ -80,9 +82,9 @@ export default function PrintView() {
                             <h3 className="font-bold text-lg">{order.userName}</h3>
                             <span className="text-sm">{new Date(order.createdAt).toLocaleDateString()}</span>
                         </div>
-                        <p className="text-sm mb-xs"><strong>Email:</strong> {order.userEmail}</p>
+                        <p className="text-sm mb-xs"><strong>{t("common.email")}:</strong> {order.userEmail}</p>
                         <div className="mt-sm">
-                            <strong>Items Requested:</strong>
+                            <strong>{t("admin.items")}</strong>
                             <p className="whitespace-pre-wrap mt-xs p-sm bg-gray-50 rounded border border-gray-200" style={{ backgroundColor: "#F9FAFB" }}>
                                 {order.items}
                             </p>

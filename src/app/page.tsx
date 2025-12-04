@@ -1,15 +1,17 @@
 "use client";
 
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 
 export default function HomePage() {
   const { user, loading } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
 
-  if (loading) return <div className="text-center mt-md">Loading...</div>;
+  if (loading) return <div className="text-center mt-md">{t("common.loading")}</div>;
 
   return (
     <div className="flex flex-col items-center gap-lg">
@@ -19,7 +21,7 @@ export default function HomePage() {
 
       <div className="card text-center" style={{ maxWidth: "600px" }}>
         <p className="mb-md text-lg">
-          Welcome to the Front Range Food Source request system.
+          {t("home.welcome")}
         </p>
 
         {user ? (
@@ -27,7 +29,7 @@ export default function HomePage() {
             <p>Hello, <strong>{user.displayName || user.email}</strong>!</p>
             <div className="flex gap-md justify-center">
               <Link href="/request" className="btn btn-primary">
-                Make a Request
+                {t("request.title")}
               </Link>
               {/* We'll add Admin link here later if user is admin */}
             </div>
@@ -35,18 +37,18 @@ export default function HomePage() {
               onClick={() => auth.signOut()}
               className="btn btn-secondary mt-md"
             >
-              Logout
+              {t("common.logout")}
             </button>
           </div>
         ) : (
           <div className="flex flex-col gap-md">
-            <p>Please login or register to submit a food request.</p>
+            <p>{t("home.pleaseLogin")}</p>
             <div className="flex gap-md justify-center">
               <Link href="/login" className="btn btn-primary">
-                Login
+                {t("common.login")}
               </Link>
               <Link href="/register" className="btn btn-secondary">
-                Register
+                {t("common.register")}
               </Link>
             </div>
           </div>
