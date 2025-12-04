@@ -7,10 +7,23 @@ import { doc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+const COLORADO_COUNTIES = [
+    "Adams", "Alamosa", "Arapahoe", "Archuleta", "Baca", "Bent", "Boulder", "Broomfield", "Chaffee", "Cheyenne",
+    "Clear Creek", "Conejos", "Costilla", "Crowley", "Custer", "Delta", "Denver", "Dolores", "Douglas", "Eagle",
+    "Elbert", "El Paso", "Fremont", "Garfield", "Gilpin", "Grand", "Gunnison", "Hinsdale", "Huerfano", "Jackson",
+    "Jefferson", "Kiowa", "Kit Carson", "Lake", "La Plata", "Larimer", "Las Animas", "Lincoln", "Logan", "Mesa",
+    "Mineral", "Moffat", "Montezuma", "Montrose", "Morgan", "Otero", "Ouray", "Park", "Phillips", "Pitkin",
+    "Prowers", "Pueblo", "Rio Blanco", "Rio Grande", "Routt", "Saguache", "San Juan", "San Miguel", "Sedgwick",
+    "Summit", "Teller", "Washington", "Weld", "Yuma"
+];
+
 export default function RegisterPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-    const [name, setName] = useState("");
+    const [firstName, setFirstName] = useState("");
+    const [lastName, setLastName] = useState("");
+    const [foodBankId, setFoodBankId] = useState("");
+    const [county, setCounty] = useState("");
     const [address, setAddress] = useState("");
     const [phone, setPhone] = useState("");
     const [adults, setAdults] = useState(1);
@@ -34,17 +47,23 @@ export default function RegisterPage() {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
-            // Update profile with name
-            await updateProfile(user, { displayName: name });
+            const fullName = `${firstName} ${lastName}`;
 
-            const familyId = generateFamilyId();
+            // Update profile with name
+            await updateProfile(user, { displayName: fullName });
+
+            // Use provided Food Bank ID or generate one
+            const finalFamilyId = foodBankId.trim() ? foodBankId.trim() : generateFamilyId();
 
             // Create user document in Firestore
             await setDoc(doc(db, "users", user.uid), {
                 uid: user.uid,
                 email: user.email,
-                name: name,
+                firstName: firstName,
+                lastName: lastName,
+                name: fullName, // Keep full name for easier display
                 address: address,
+                county: county,
                 phone: phone,
                 familySize: {
                     adults: Number(adults),
@@ -52,7 +71,7 @@ export default function RegisterPage() {
                     seniors: Number(seniors),
                     total: Number(adults) + Number(children) + Number(seniors)
                 },
-                familyId: familyId,
+                familyId: finalFamilyId,
                 role: "USER", // Default role
                 createdAt: new Date().toISOString(),
             });
@@ -71,16 +90,29 @@ export default function RegisterPage() {
                 <h1 className="text-xl text-center mb-md">Register Family</h1>
                 {error && <div className="text-center mb-md" style={{ color: "var(--color-error)" }}>{error}</div>}
                 <form onSubmit={handleRegister} className="flex flex-col gap-md">
-                    <div>
-                        <label className="label">Full Name (Head of Household)</label>
-                        <input
-                            type="text"
-                            className="input"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            required
-                        />
+                    <div className="grid grid-cols-2 gap-md">
+                        <div>
+                            <label className="label">First Name</label>
+                            <input
+                                type="text"
+                                className="input"
+                                value={firstName}
+                                onChange={(e) => setFirstName(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="label">Last Name</label>
+                            <input
+                                type="text"
+                                className="input"
+                                value={lastName}
+                                onChange={(e) => setLastName(e.target.value)}
+                                required
+                            />
+                        </div>
                     </div>
+
                     <div>
                         <label className="label">Email</label>
                         <input
@@ -102,7 +134,7 @@ export default function RegisterPage() {
                             minLength={6}
                         />
                     </div>
-                    
+
                     <div>
                         <label className="label">Address</label>
                         <input
@@ -116,6 +148,21 @@ export default function RegisterPage() {
                     </div>
 
                     <div>
+                        <label className="label">Which county do you live in?</label>
+                        <select
+                            className="input"
+                            value={county}
+                            onChange={(e) => setCounty(e.target.value)}
+                            required
+                        >
+                            <option value="">Select a county...</option>
+                            {COLORADO_COUNTIES.map(c => (
+                                <option key={c} value={c}>{c}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
                         <label className="label">Phone Number</label>
                         <input
                             type="tel"
@@ -125,6 +172,18 @@ export default function RegisterPage() {
                             required
                             placeholder="(555) 123-4567"
                         />
+                    </div>
+
+                    <div>
+                        <label className="label">Food Bank ID <span className="text-sm font-normal text-muted">(Optional)</span></label>
+                        <input
+                            type="text"
+                            className="input"
+                            value={foodBankId}
+                            onChange={(e) => setFoodBankId(e.target.value)}
+                            placeholder="If you have one, enter it here"
+                        />
+                        <p className="text-xs text-muted mt-xs">If you do not have one, one will be assigned to you.</p>
                     </div>
 
                     <div className="grid grid-cols-3 gap-sm">
