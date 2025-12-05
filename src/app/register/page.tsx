@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { auth, db } from "@/lib/firebase";
-import { doc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { auth, db } from "@/lib/firebase";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { doc, setDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { useLanguage } from "@/context/LanguageContext";
 
+// List of Colorado Counties
 const COLORADO_COUNTIES = [
     "Adams", "Alamosa", "Arapahoe", "Archuleta", "Baca", "Bent", "Boulder", "Broomfield", "Chaffee", "Cheyenne",
     "Clear Creek", "Conejos", "Costilla", "Crowley", "Custer", "Delta", "Denver", "Dolores", "Douglas", "Eagle",
@@ -19,81 +20,128 @@ const COLORADO_COUNTIES = [
 ];
 
 export default function RegisterPage() {
+    const router = useRouter();
+    const { t } = useLanguage();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [firstName, setFirstName] = useState("");
     const [lastName, setLastName] = useState("");
-    const [foodBankId, setFoodBankId] = useState("");
-    const [county, setCounty] = useState("");
     const [address, setAddress] = useState("");
     const [phone, setPhone] = useState("");
+    const [county, setCounty] = useState("");
+    const [foodBankId, setFoodBankId] = useState("");
     const [adults, setAdults] = useState(1);
     const [children, setChildren] = useState(0);
     const [seniors, setSeniors] = useState(0);
     const [error, setError] = useState("");
-    const [submitting, setSubmitting] = useState(false);
-    const router = useRouter();
-    const { t } = useLanguage();
-
-    const generateFamilyId = () => {
-        // Simple random ID generation: FAM-XXXX
-        const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
-        return `FAM-${randomStr}`;
-    };
+    const [loading, setLoading] = useState(false);
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         setError("");
-        setSubmitting(true);
+        setLoading(true);
+
         try {
+            // 1. Check for duplicates in Firestore
+            const usersRef = collection(db, "users");
+
+            // Check Phone
+            const phoneQ = query(usersRef, where("phone", "==", phone));
+            const phoneSnap = await getDocs(phoneQ);
+            if (!phoneSnap.empty) {
+                throw new Error("duplicatePhone");
+            }
+
+            // Check Address
+            const addressQ = query(usersRef, where("address", "==", address));
+            const addressSnap = await getDocs(addressQ);
+            if (!addressSnap.empty) {
+                throw new Error("duplicateAddress");
+            }
+
+            // Check Food Bank ID (if provided)
+            if (foodBankId) {
+                const idQ = query(usersRef, where("foodBankId", "==", foodBankId));
+                const idSnap = await getDocs(idQ);
+                if (!idSnap.empty) {
+                    throw new Error("duplicateFoodBankId");
+                }
+            }
+
+            // Check Name (First + Last)
+            const nameQ = query(usersRef, where("firstName", "==", firstName), where("lastName", "==", lastName));
+            const nameSnap = await getDocs(nameQ);
+            if (!nameSnap.empty) {
+                throw new Error("duplicateName");
+            }
+
+            // 2. Create User in Auth
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
-            const fullName = `${firstName} ${lastName}`;
+            // Update profile
+            await updateProfile(user, { displayName: `${firstName} ${lastName}` });
 
-            // Update profile with name
-            await updateProfile(user, { displayName: fullName });
+            // 3. Generate Family ID (if not provided)
+            const finalFoodBankId = foodBankId || `FB-${Date.now().toString().slice(-6)}`;
 
-            // Use provided Food Bank ID or generate one
-            const finalFamilyId = foodBankId.trim() ? foodBankId.trim() : generateFamilyId();
-
-            // Create user document in Firestore
+            // 4. Store additional details in Firestore
             await setDoc(doc(db, "users", user.uid), {
                 uid: user.uid,
                 email: user.email,
-                firstName: firstName,
-                lastName: lastName,
-                name: fullName, // Keep full name for easier display
-                address: address,
-                county: county,
-                phone: phone,
+                firstName,
+                lastName,
+                displayName: `${firstName} ${lastName}`,
+                address,
+                phone,
+                county,
+                foodBankId: finalFoodBankId,
                 familySize: {
-                    adults: Number(adults),
-                    children: Number(children),
-                    seniors: Number(seniors),
+                    adults,
+                    children,
+                    seniors,
                     total: Number(adults) + Number(children) + Number(seniors)
                 },
-                familyId: finalFamilyId,
-                role: "USER", // Default role
-                createdAt: new Date().toISOString(),
+                role: "USER",
+                createdAt: new Date().toISOString()
             });
 
             router.push("/");
         } catch (err: any) {
-            setError(err.message || t("register.failed"));
-            console.error(err);
+            console.error("Registration error:", err);
+
+            let errorMsg = t("register.failed");
+            const loginResetMsg = ` ${t("register.loginOrReset")}`;
+
+            if (err.message === "duplicatePhone") {
+                errorMsg = t("register.duplicatePhone") + loginResetMsg;
+            } else if (err.message === "duplicateAddress") {
+                errorMsg = t("register.duplicateAddress") + loginResetMsg;
+            } else if (err.message === "duplicateFoodBankId") {
+                errorMsg = t("register.duplicateFoodBankId") + loginResetMsg;
+            } else if (err.message === "duplicateName") {
+                errorMsg = t("register.duplicateName") + loginResetMsg;
+            } else if (err.code === "auth/email-already-in-use") {
+                errorMsg = t("register.duplicateEmail") + loginResetMsg;
+            } else if (err.message) {
+                // Fallback for other errors
+                errorMsg = err.message;
+            }
+
+            setError(errorMsg);
         }
-        setSubmitting(false);
+        setLoading(false);
     };
 
     return (
-        <div className="flex justify-center items-center py-md" style={{ minHeight: "60vh" }}>
+        <div className="flex justify-center">
             <div className="card" style={{ width: "100%", maxWidth: "500px" }}>
-                <h1 className="text-xl text-center mb-md">{t("register.title")}</h1>
-                {error && <div className="text-center mb-md" style={{ color: "var(--color-error)" }}>{error}</div>}
+                <h1 className="text-2xl font-bold mb-md text-center">{t("register.title")}</h1>
+                {error && <div className="bg-red-100 text-red-700 p-sm rounded mb-md text-sm">{error}</div>}
                 <form onSubmit={handleRegister} className="flex flex-col gap-md">
-                    <div className="grid grid-cols-2 gap-md">
-                        <div>
+
+                    <div className="flex gap-md">
+                        <div className="flex-1">
                             <label className="label">{t("register.firstName")}</label>
                             <input
                                 type="text"
@@ -103,7 +151,7 @@ export default function RegisterPage() {
                                 required
                             />
                         </div>
-                        <div>
+                        <div className="flex-1">
                             <label className="label">{t("register.lastName")}</label>
                             <input
                                 type="text"
@@ -133,7 +181,6 @@ export default function RegisterPage() {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
-                            minLength={6}
                         />
                     </div>
 
@@ -145,7 +192,17 @@ export default function RegisterPage() {
                             value={address}
                             onChange={(e) => setAddress(e.target.value)}
                             required
-                            placeholder="123 Main St, City, Zip"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="label">{t("register.phone")}</label>
+                        <input
+                            type="tel"
+                            className="input"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            required
                         />
                     </div>
 
@@ -165,19 +222,7 @@ export default function RegisterPage() {
                     </div>
 
                     <div>
-                        <label className="label">{t("register.phone")}</label>
-                        <input
-                            type="tel"
-                            className="input"
-                            value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
-                            required
-                            placeholder="(555) 123-4567"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="label">{t("register.foodBankId")} <span className="text-sm font-normal text-muted">{t("register.optional")}</span></label>
+                        <label className="label">{t("register.foodBankId")} <span className="text-muted font-normal">{t("register.optional")}</span></label>
                         <input
                             type="text"
                             className="input"
@@ -188,49 +233,49 @@ export default function RegisterPage() {
                         <p className="text-xs text-muted mt-xs">{t("register.foodBankIdHelp")}</p>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-sm">
-                        <div>
-                            <label className="label text-sm">{t("register.adults")}</label>
+                    <div className="flex gap-md">
+                        <div className="flex-1">
+                            <label className="label">{t("register.adults")}</label>
                             <input
                                 type="number"
+                                min="1"
                                 className="input"
                                 value={adults}
-                                onChange={(e) => setAdults(Number(e.target.value))}
-                                min={1}
+                                onChange={(e) => setAdults(parseInt(e.target.value))}
                                 required
                             />
                         </div>
-                        <div>
-                            <label className="label text-sm">{t("register.children")}</label>
+                        <div className="flex-1">
+                            <label className="label">{t("register.children")}</label>
                             <input
                                 type="number"
+                                min="0"
                                 className="input"
                                 value={children}
-                                onChange={(e) => setChildren(Number(e.target.value))}
-                                min={0}
+                                onChange={(e) => setChildren(parseInt(e.target.value))}
                                 required
                             />
                         </div>
-                        <div>
-                            <label className="label text-sm">{t("register.seniors")}</label>
+                        <div className="flex-1">
+                            <label className="label">{t("register.seniors")}</label>
                             <input
                                 type="number"
+                                min="0"
                                 className="input"
                                 value={seniors}
-                                onChange={(e) => setSeniors(Number(e.target.value))}
-                                min={0}
+                                onChange={(e) => setSeniors(parseInt(e.target.value))}
                                 required
                             />
                         </div>
                     </div>
 
-                    <button type="submit" className="btn btn-primary" disabled={submitting}>
-                        {submitting ? t("register.registering") : t("common.register")}
+                    <button type="submit" className="btn btn-primary" disabled={loading}>
+                        {loading ? t("register.registering") : t("common.register")}
                     </button>
                 </form>
-                <div className="text-center mt-md text-sm">
-                    {t("register.alreadyHaveAccount")} <Link href="/login" style={{ color: "var(--color-primary)" }}>{t("register.loginHere")}</Link>
-                </div>
+                <p className="text-center mt-md text-sm">
+                    {t("register.alreadyHaveAccount")} <Link href="/login" className="text-blue-600 hover:underline">{t("register.loginHere")}</Link>
+                </p>
             </div>
         </div>
     );

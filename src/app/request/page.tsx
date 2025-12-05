@@ -20,6 +20,7 @@ export default function RequestPage() {
     const [message, setMessage] = useState("");
     const [currentBatchId, setCurrentBatchId] = useState<string | null>(null);
     const [hasOrdered, setHasOrdered] = useState(false);
+    const [nextPickupDate, setNextPickupDate] = useState("");
 
     // Check if form is open (Real-time listener)
     useEffect(() => {
@@ -30,6 +31,7 @@ export default function RequestPage() {
                 const scheduledOpen = data.scheduledOpen;
                 const scheduledClose = data.scheduledClose;
                 setCurrentBatchId(data.currentBatchId || null);
+                setNextPickupDate(data.nextPickupDate || "");
 
                 // Determine if open based on schedule or manual override
                 let open = manualOpen;
@@ -156,6 +158,14 @@ export default function RequestPage() {
                 <h1 className="text-2xl font-bold mb-md text-center">{t("request.title")}</h1>
 
                 {scheduleMessage && <div className="text-center text-sm text-muted mb-md">{scheduleMessage}</div>}
+
+                {/* Next Pick-up Date Display */}
+                {nextPickupDate && (
+                    <div className="text-center mb-md p-sm bg-blue-50 text-blue-800 rounded">
+                        <span className="font-bold">{t("request.nextPickup")} </span>
+                        <span>{new Date(nextPickupDate).toLocaleDateString()}</span>
+                    </div>
+                )}
 
                 {message && (
                     <div className={`p-md mb-md rounded ${message.includes(t("common.error")) ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}`} style={{ backgroundColor: message.includes(t("common.error")) ? "#FEE2E2" : "#D1FAE5", color: message.includes(t("common.error")) ? "#991B1B" : "#065F46" }}>

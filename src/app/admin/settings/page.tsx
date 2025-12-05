@@ -16,6 +16,7 @@ export default function AdminSettings() {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [scheduledOpen, setScheduledOpen] = useState("");
     const [scheduledClose, setScheduledClose] = useState("");
+    const [nextPickupDate, setNextPickupDate] = useState("");
     const [loadingSettings, setLoadingSettings] = useState(true);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState("");
@@ -39,6 +40,7 @@ export default function AdminSettings() {
                 setIsFormOpen(data.isFormOpen);
                 setScheduledOpen(data.scheduledOpen || "");
                 setScheduledClose(data.scheduledClose || "");
+                setNextPickupDate(data.nextPickupDate || "");
             }
         } catch (err) {
             console.error("Error fetching settings:", err);
@@ -47,6 +49,14 @@ export default function AdminSettings() {
     };
 
     const handleSave = async () => {
+        // Validation: Check if scheduling open but no pickup date
+        if (scheduledOpen && !nextPickupDate) {
+            const confirmed = window.confirm(t("settings.pickupDateWarning"));
+            if (!confirmed) {
+                return;
+            }
+        }
+
         setSaving(true);
         setMessage("");
         try {
@@ -63,7 +73,8 @@ export default function AdminSettings() {
             await setDoc(doc(db, "settings", "global"), {
                 isFormOpen,
                 scheduledOpen,
-                scheduledClose
+                scheduledClose,
+                nextPickupDate
             }, { merge: true });
             setMessage(t("settings.savedSuccess"));
         } catch (err) {
@@ -165,8 +176,20 @@ export default function AdminSettings() {
                                     onChange={(e) => setScheduledClose(e.target.value)}
                                 />
                             </div>
+
+                            {/* Next Pick-up Date */}
+                            <div>
+                                <label className="label">{t("settings.nextPickupDate")}</label>
+                                <input
+                                    type="date"
+                                    className="input"
+                                    value={nextPickupDate}
+                                    onChange={(e) => setNextPickupDate(e.target.value)}
+                                />
+                            </div>
+
                             <button
-                                onClick={() => { setScheduledOpen(""); setScheduledClose(""); }}
+                                onClick={() => { setScheduledOpen(""); setScheduledClose(""); setNextPickupDate(""); }}
                                 className="text-sm text-red-600 underline text-left"
                             >
                                 {t("settings.clearSchedule")}
