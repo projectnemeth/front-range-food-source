@@ -616,11 +616,11 @@ export default function RequestPage() {
                             </div>
 
                             <div className="flex gap-md pt-md">
-                                <button type="submit" className="btn btn-primary flex-1">
-                                    {t("request.next")}
-                                </button>
                                 <button type="button" onClick={() => router.push("/")} className="btn btn-secondary">
                                     {t("common.cancel")}
+                                </button>
+                                <button type="submit" className="btn btn-primary flex-1">
+                                    {t("request.next")}
                                 </button>
                             </div>
                         </>
@@ -686,11 +686,11 @@ export default function RequestPage() {
                             </div>
 
                             <div className="flex gap-md pt-md">
-                                <button type="submit" className="btn btn-primary flex-1" disabled={submitting}>
-                                    {submitting ? t("request.submitting") : t("request.submitOrder")}
-                                </button>
                                 <button type="button" onClick={handleBack} className="btn btn-secondary" disabled={submitting}>
                                     {t("request.back")}
+                                </button>
+                                <button type="submit" className="btn btn-primary flex-1" disabled={submitting}>
+                                    {submitting ? t("request.submitting") : t("request.submitOrder")}
                                 </button>
                             </div>
                         </div>
