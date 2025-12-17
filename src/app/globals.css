@@ -149,3 +149,45 @@ button {
 .text-xl { font-size: var(--font-size-xl); font-weight: 600; }
 .text-sm { font-size: var(--font-size-sm); }
 .text-muted { color: var(--color-text-muted); }
+
+/* Print Styles */
+@media print {
+  /* Hide standard UI elements */
+  body * {
+    visibility: hidden;
+  }
+  
+  /* Show only the print container */
+  #print-container, #print-container * {
+    visibility: visible;
+  }
+
+  #print-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  /* Reset backgrounds and colors for print */
+  body {
+    background-color: white;
+  }
+  
+  .card {
+    box-shadow: none;
+    border: none;
+    padding: 0;
+  }
+
+  /* Page Break Utilities */
+  .page-break {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  /* Ensure text is black for proper contrast */
+  .text-muted {
+    color: #000;
+  }
+}
