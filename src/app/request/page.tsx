@@ -601,19 +601,7 @@ export default function RequestPage() {
                                 </div>
                             </div>
 
-                            <hr className="border-gray-200" />
 
-                            {/* 10. Other Items */}
-                            <div>
-                                <label className="label font-bold">{t("request.otherItemsLabel")}</label>
-                                <textarea
-                                    className="input"
-                                    rows={3}
-                                    value={items}
-                                    onChange={(e) => setItems(e.target.value)}
-                                    placeholder={t("request.itemsPlaceholder")}
-                                />
-                            </div>
 
                             <div className="flex gap-md pt-md">
                                 <button type="button" onClick={() => router.push("/")} className="btn btn-secondary">
