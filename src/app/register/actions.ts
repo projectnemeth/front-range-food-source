@@ -2,13 +2,14 @@
 
 import { adminDb } from '@/lib/firebase-admin';
 
-export async function validateRegistrationData(data: {
+export const validateRegistrationData = async (data: {
     firstName: string;
     lastName: string;
     address: string;
     phone: string;
     foodBankId?: string;
-}) {
+}) => {
+    console.log('Server Action: validateRegistrationData called with:', { ...data, phone: '***', address: '***' });
     const { firstName, lastName, address, phone, foodBankId } = data;
 
     try {

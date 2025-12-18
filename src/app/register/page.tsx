@@ -43,6 +43,7 @@ export default function RegisterPage() {
         setLoading(true);
 
         try {
+            console.log('Attempting server-side validation...');
             // 1. Validate duplicates on the SERVER (Admin permissions)
             const validation = await validateRegistrationData({
                 firstName,
@@ -51,6 +52,8 @@ export default function RegisterPage() {
                 phone,
                 foodBankId: foodBankId || undefined
             });
+
+            console.log('Validation response:', validation);
 
             if (validation.error) {
                 throw new Error(validation.error);
