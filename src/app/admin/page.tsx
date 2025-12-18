@@ -107,10 +107,14 @@ export default function AdminDashboard() {
                 setSelectedBatchId(currentId);
             } else if (batchesData.length > 0) {
                 setSelectedBatchId(batchesData[0].id);
+            } else {
+                // If no batches, clear loading for data
+                setLoadingData(false);
             }
 
         } catch (err) {
             console.error("Error fetching batches:", err);
+            setLoadingData(false);
         }
     };
 
@@ -143,7 +147,6 @@ export default function AdminDashboard() {
             } as Order));
 
             // 1b. Fetch Users to map Phone Numbers
-            // Optimization: Filter users by IDs in orders if list is huge, but fetching all is simpler for MVP
             const usersSnapshot = await getDocs(collection(db, "users"));
             const userPhoneMap = new Map<string, string>();
             usersSnapshot.forEach(doc => {
@@ -161,12 +164,12 @@ export default function AdminDashboard() {
 
             setOrders(ordersData);
 
-            // 2. Calculate Order Stats (Based on filtered orders)
+            // 2. Calculate Order Stats
             const totalOrders = ordersData.length;
             const pendingOrders = ordersData.filter(o => o.status === "PENDING").length;
             const completedOrders = ordersData.filter(o => o.status === "COMPLETED").length;
 
-            // 3. Calculate 90-Day Rolling View (Weekly) - Global
+            // 3. Calculate 90-Day Rolling View (Weekly)
             const trendQ = query(collection(db, "orders"), orderBy("createdAt", "desc"));
             const trendSnapshot = await getDocs(trendQ);
             const allOrdersData = trendSnapshot.docs.map(doc => ({ ...doc.data() } as Order));
@@ -179,12 +182,10 @@ export default function AdminDashboard() {
             allOrdersData.forEach(order => {
                 const orderDate = new Date(order.createdAt);
                 if (orderDate >= ninetyDaysAgo) {
-                    // Get start of week (Sunday)
                     const weekStart = new Date(orderDate);
                     weekStart.setDate(orderDate.getDate() - orderDate.getDay());
                     weekStart.setHours(0, 0, 0, 0);
                     const key = weekStart.toISOString();
-
                     weeklyMap.set(key, (weeklyMap.get(key) || 0) + 1);
                 }
             });
@@ -193,12 +194,12 @@ export default function AdminDashboard() {
                 .map(([weekStart, count]) => ({ weekStart, count }))
                 .sort((a, b) => a.weekStart.localeCompare(b.weekStart));
 
-            // 4. Fetch User Stats (Global)
+            // 4. Fetch User Stats
             const usersColl = collection(db, "users");
             const usersCountSnapshot = await getCountFromServer(usersColl);
             const totalFamilies = usersCountSnapshot.data().count;
 
-            // 5. Fetch New Users (Last 21 Days) (Global)
+            // 5. Fetch New Users (Last 21 Days)
             const twentyOneDaysAgo = new Date();
             twentyOneDaysAgo.setDate(twentyOneDaysAgo.getDate() - 21);
             const twentyOneDaysAgoISO = twentyOneDaysAgo.toISOString();
@@ -218,8 +219,9 @@ export default function AdminDashboard() {
 
         } catch (err) {
             console.error("Error fetching admin data:", err);
+        } finally {
+            setLoadingData(false);
         }
-        setLoadingData(false);
     };
 
     const handleStatusUpdate = async (orderId: string, newStatus: string) => {

@@ -33,12 +33,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             setUser(user);
             if (user) {
-                // Fetch profile
-                const docRef = doc(db, "users", user.uid);
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    setProfile(docSnap.data() as UserProfile);
-                } else {
+                try {
+                    // Fetch profile
+                    const docRef = doc(db, "users", user.uid);
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) {
+                        setProfile(docSnap.data() as UserProfile);
+                    } else {
+                        setProfile(null);
+                    }
+                } catch (error) {
+                    console.error("Error fetching user profile:", error);
                     setProfile(null);
                 }
             } else {

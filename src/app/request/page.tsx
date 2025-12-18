@@ -143,6 +143,7 @@ export default function RequestPage() {
                     }
                 } catch (err) {
                     console.error("Error checking existing orders:", err);
+                    setHasOrdered(false);
                 }
             }
         };

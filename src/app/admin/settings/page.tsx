@@ -44,8 +44,9 @@ export default function AdminSettings() {
             }
         } catch (err) {
             console.error("Error fetching settings:", err);
+        } finally {
+            setLoadingSettings(false);
         }
-        setLoadingSettings(false);
     };
 
     const handleSave = async () => {
