@@ -6,7 +6,6 @@ import Link from "next/link";
 import { auth, db } from "@/lib/firebase";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
-import { validateRegistrationData } from "./actions";
 import { useLanguage } from "@/context/LanguageContext";
 
 // List of Colorado Counties
@@ -43,20 +42,25 @@ export default function RegisterPage() {
         setLoading(true);
 
         try {
-            console.log('Attempting server-side validation...');
-            // 1. Validate duplicates on the SERVER (Admin permissions)
-            const validation = await validateRegistrationData({
-                firstName,
-                lastName,
-                address,
-                phone,
-                foodBankId: foodBankId || undefined
+            console.log('Attempting server-side validation via API...');
+
+            const response = await fetch('/api/validate-registration', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    firstName,
+                    lastName,
+                    address,
+                    phone,
+                    foodBankId: foodBankId || undefined
+                }),
             });
 
+            const validation = await response.json();
             console.log('Validation response:', validation);
 
-            if (validation.error) {
-                throw new Error(validation.error);
+            if (!response.ok) {
+                throw new Error(validation.error || 'serverError');
             }
 
             // 2. Create User in Auth
