@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { auth, db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+
 import { useLanguage } from "@/context/LanguageContext";
 
 // List of Colorado Counties
@@ -73,26 +73,32 @@ export default function RegisterPage() {
             // 3. Generate Family ID (if not provided)
             const finalFoodBankId = foodBankId || `FB-${Date.now().toString().slice(-6)}`;
 
-            // 4. Store additional details in Firestore (User only has permission to write their OWN doc)
-            await setDoc(doc(db, "users", user.uid), {
-                uid: user.uid,
-                email: user.email,
-                firstName,
-                lastName,
-                displayName: `${firstName} ${lastName}`,
-                address,
-                phone,
-                county,
-                foodBankId: finalFoodBankId,
-                familySize: {
-                    adults,
-                    children,
-                    seniors,
-                    total: Number(adults) + Number(children) + Number(seniors)
-                },
-                role: "USER",
-                createdAt: new Date().toISOString()
+            // 4. Store additional details in Firestore via Server API
+            const finalizeResponse = await fetch('/api/finalize-registration', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    uid: user.uid,
+                    email: user.email,
+                    firstName,
+                    lastName,
+                    address,
+                    phone,
+                    county,
+                    foodBankId: finalFoodBankId,
+                    familySize: {
+                        adults,
+                        children,
+                        seniors,
+                        total: Number(adults) + Number(children) + Number(seniors)
+                    }
+                }),
             });
+
+            if (!finalizeResponse.ok) {
+                const finalizeResult = await finalizeResponse.json();
+                throw new Error(finalizeResult.error || 'finalizeError');
+            }
 
             router.push("/");
         } catch (err: any) {
