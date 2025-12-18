@@ -82,67 +82,70 @@ export default function RequestPage() {
         ]
     };
 
-    // Check if form is open (Real-time listener)
+    // Check if form is open (Fetch from server API)
     useEffect(() => {
-        const unsubscribe = onSnapshot(doc(db, "settings", "global"), (doc) => {
-            if (doc.exists()) {
-                const data = doc.data();
-                const manualOpen = data.isFormOpen;
-                const scheduledOpen = data.scheduledOpen;
-                const scheduledClose = data.scheduledClose;
-                setCurrentBatchId(data.currentBatchId || null);
-                setNextPickupDate(data.nextPickupDate || "");
+        const fetchSettings = async () => {
+            try {
+                const response = await fetch("/api/settings");
+                if (response.ok) {
+                    const data = await response.json();
 
-                // Determine if open based on schedule or manual override
-                // We treat data.isFormOpen as a manual override if true.
-                let open = manualOpen === true;
-                let msg = "";
+                    const manualOpen = data.isFormOpen;
+                    const scheduledOpen = data.scheduledOpen;
+                    const scheduledClose = data.scheduledClose;
+                    setCurrentBatchId(data.currentBatchId || null);
+                    setNextPickupDate(data.nextPickupDate || "");
 
-                if (scheduledOpen && scheduledClose) {
-                    const now = new Date();
-                    const openDate = new Date(scheduledOpen);
-                    const closeDate = new Date(scheduledClose);
+                    // Determine if open based on schedule or manual override
+                    let open = manualOpen === true;
+                    let msg = "";
 
-                    const isScheduledOpen = now >= openDate && now <= closeDate;
+                    if (scheduledOpen && scheduledClose) {
+                        const now = new Date();
+                        const openDate = new Date(scheduledOpen);
+                        const closeDate = new Date(scheduledClose);
 
-                    if (isScheduledOpen) {
-                        open = true;
-                        msg = `${t("request.formClosesOn")} ${closeDate.toLocaleString()}`;
-                    } else if (now < openDate) {
-                        if (!open) {
-                            msg = `${t("request.formOpensOn")} ${openDate.toLocaleString()}`;
-                        } else {
+                        const isScheduledOpen = now >= openDate && now <= closeDate;
+
+                        if (isScheduledOpen) {
+                            open = true;
                             msg = `${t("request.formClosesOn")} ${closeDate.toLocaleString()}`;
-                        }
-                    } else if (now > closeDate) {
-                        if (!open) {
-                            msg = `${t("request.formClosedOn")} ${closeDate.toLocaleString()}`;
+                        } else if (now < openDate) {
+                            if (!open) {
+                                msg = `${t("request.formOpensOn")} ${openDate.toLocaleString()}`;
+                            } else {
+                                msg = `${t("request.formClosesOn")} ${closeDate.toLocaleString()}`;
+                            }
+                        } else if (now > closeDate) {
+                            if (!open) {
+                                msg = `${t("request.formClosedOn")} ${closeDate.toLocaleString()}`;
+                            }
                         }
                     }
+
+                    console.log("Form State Debug (API):", {
+                        manualOpen: manualOpen,
+                        currentOpenState: open,
+                        now: new Date().toISOString(),
+                        scheduledOpen,
+                        scheduledClose
+                    });
+
+                    setIsFormOpen(open);
+                    setScheduleMessage(msg);
+                } else {
+                    console.warn("Settings API returned error:", response.status);
+                    setIsFormOpen(false);
                 }
-
-                console.log("Form State Debug:", {
-                    manualOpen: manualOpen,
-                    currentOpenState: open,
-                    now: new Date().toISOString(),
-                    scheduledOpen,
-                    scheduledClose
-                });
-
-                setIsFormOpen(open);
-                setScheduleMessage(msg);
-            } else {
-                console.warn("Global settings document not found");
+            } catch (error) {
+                console.error("Settings fetch error:", error);
                 setIsFormOpen(false);
+            } finally {
+                setLoadingSettings(false);
             }
-            setLoadingSettings(false);
-        }, (error) => {
-            console.error("Settings snapshot error:", error);
-            setIsFormOpen(false);
-            setLoadingSettings(false);
-        });
+        };
 
-        return () => unsubscribe();
+        fetchSettings();
     }, [t]);
 
     // Check if user has already ordered in this batch

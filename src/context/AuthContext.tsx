@@ -34,16 +34,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setUser(user);
             if (user) {
                 try {
-                    // Fetch profile
-                    const docRef = doc(db, "users", user.uid);
-                    const docSnap = await getDoc(docRef);
-                    if (docSnap.exists()) {
-                        setProfile(docSnap.data() as UserProfile);
+                    // Fetch profile via server-side API to bypass Firestore rules
+                    const token = await user.getIdToken();
+                    const response = await fetch("/api/profile", {
+                        headers: {
+                            "Authorization": `Bearer ${token}`
+                        }
+                    });
+
+                    if (response.ok) {
+                        const profileData = await response.json();
+                        setProfile(profileData as UserProfile);
                     } else {
+                        console.warn("Profile API returned error:", response.status);
                         setProfile(null);
                     }
                 } catch (error) {
-                    console.error("Error fetching user profile:", error);
+                    console.error("Error fetching user profile via API:", error);
                     setProfile(null);
                 }
             } else {
