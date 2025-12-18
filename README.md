@@ -1,7 +1,9 @@
-This is a [Next.js](https://nextjs.org) project, developed with Google's Antigravity, bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app), deployed on Vercel, utilizing Firebase. 
+This is a [Next.js](https://nextjs.org) project for the **Front Range Food Source**, developed with Google's Antigravity, bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app), utilizing Firebase for backend and hosted on Vercel.
 
-It's a work in progress with new features added each week. 
+**Production Application:** [https://app.frontrangefoodsource.org](https://app.frontrangefoodsource.org)
 
-Version: 0.4
+It's a work in progress with new features added each week.
 
-Readme last updated: 12/4/25 at 2:02 MT
+Version: 0.5
+
+Readme last updated: 12/18/25 at 9:15 MT
