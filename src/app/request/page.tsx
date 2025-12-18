@@ -94,7 +94,8 @@ export default function RequestPage() {
                 setNextPickupDate(data.nextPickupDate || "");
 
                 // Determine if open based on schedule or manual override
-                let open = manualOpen;
+                // We treat data.isFormOpen as a manual override if true.
+                let open = manualOpen === true;
                 let msg = "";
 
                 if (scheduledOpen && scheduledClose) {
@@ -102,30 +103,36 @@ export default function RequestPage() {
                     const openDate = new Date(scheduledOpen);
                     const closeDate = new Date(scheduledClose);
 
-                    if (now < openDate) {
-                        // If manually open, we stay open but can show the upcoming schedule
-                        if (!manualOpen) {
-                            open = false;
+                    const isScheduledOpen = now >= openDate && now <= closeDate;
+
+                    if (isScheduledOpen) {
+                        open = true;
+                        msg = `${t("request.formClosesOn")} ${closeDate.toLocaleString()}`;
+                    } else if (now < openDate) {
+                        if (!open) {
                             msg = `${t("request.formOpensOn")} ${openDate.toLocaleString()}`;
                         } else {
                             msg = `${t("request.formClosesOn")} ${closeDate.toLocaleString()}`;
                         }
                     } else if (now > closeDate) {
-                        // If manually open, we stay open despite the schedule being in the past
-                        if (!manualOpen) {
-                            open = false;
+                        if (!open) {
                             msg = `${t("request.formClosedOn")} ${closeDate.toLocaleString()}`;
                         }
-                    } else {
-                        // Within scheduled time
-                        open = true;
-                        msg = `${t("request.formClosesOn")} ${closeDate.toLocaleString()}`;
                     }
                 }
+
+                console.log("Form State Debug:", {
+                    manualOpen: manualOpen,
+                    currentOpenState: open,
+                    now: new Date().toISOString(),
+                    scheduledOpen,
+                    scheduledClose
+                });
 
                 setIsFormOpen(open);
                 setScheduleMessage(msg);
             } else {
+                console.warn("Global settings document not found");
                 setIsFormOpen(false);
             }
             setLoadingSettings(false);
