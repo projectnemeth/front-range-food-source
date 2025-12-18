@@ -120,6 +120,10 @@ export default function RequestPage() {
                 setIsFormOpen(false);
             }
             setLoadingSettings(false);
+        }, (error) => {
+            console.error("Settings snapshot error:", error);
+            setIsFormOpen(false);
+            setLoadingSettings(false);
         });
 
         return () => unsubscribe();
