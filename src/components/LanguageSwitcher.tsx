@@ -19,6 +19,12 @@ export default function LanguageSwitcher() {
             >
                 <span>🇲🇽</span> Español
             </button>
+            <button
+                onClick={() => setLanguage("ru")}
+                className={`px-3 py-2 text-sm rounded flex items-center gap-2 ${language === "ru" ? "bg-primary text-white font-bold" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+            >
+                <span>🇷🇺</span> Русский
+            </button>
         </div>
     );
 }
