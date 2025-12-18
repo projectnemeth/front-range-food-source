@@ -95,6 +95,9 @@ export const translations = {
             savedSuccess: "Settings saved successfully.",
             saveError: "Error saving settings.",
             pickupDateWarning: "You are scheduling the form to open but haven't set a Next Pick-up Date. Are you sure you want to proceed?",
+            scheduledMode: "Follow Schedule",
+            returnToSchedule: "Return to Schedule",
+            manualOverrideActive: "Manual Override Active",
         },
         forgotPassword: {
             title: "Reset Password",
@@ -478,6 +481,9 @@ export const translations = {
             savedSuccess: "Configuración guardada con éxito.",
             saveError: "Error al guardar la configuración.",
             pickupDateWarning: "Está programando la apertura del formulario pero no ha establecido una Fecha de Próxima Recogida. ¿Está seguro de que desea continuar?",
+            scheduledMode: "Seguir Horario",
+            returnToSchedule: "Volver al Horario",
+            manualOverrideActive: "Anulación Manual Activa",
         },
         forgotPassword: {
             title: "Restablecer Contraseña",
@@ -722,6 +728,9 @@ export const translations = {
             savedSuccess: "Настройки успешно сохранены.",
             saveError: "Ошибка при сохранении.",
             pickupDateWarning: "Вы планируете открытие формы, но не установили дату самовывоза. Вы уверены?",
+            scheduledMode: "По расписанию",
+            returnToSchedule: "Вернуться к расписанию",
+            manualOverrideActive: "Активно ручное управление",
         },
         forgotPassword: {
             title: "Сброс пароля",

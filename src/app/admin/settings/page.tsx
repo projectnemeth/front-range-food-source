@@ -13,7 +13,7 @@ export default function AdminSettings() {
     const { user, profile, loading } = useAuth();
     const router = useRouter();
     const { t } = useLanguage();
-    const [isFormOpen, setIsFormOpen] = useState(false);
+    const [isFormOpen, setIsFormOpen] = useState<boolean | null>(null);
     const [scheduledOpen, setScheduledOpen] = useState("");
     const [scheduledClose, setScheduledClose] = useState("");
     const [nextPickupDate, setNextPickupDate] = useState("");
@@ -37,7 +37,7 @@ export default function AdminSettings() {
             const docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                setIsFormOpen(data.isFormOpen);
+                setIsFormOpen(data.isFormOpen !== undefined ? data.isFormOpen : null);
                 setScheduledOpen(data.scheduledOpen || "");
                 setScheduledClose(data.scheduledClose || "");
                 setNextPickupDate(data.nextPickupDate || "");
@@ -85,37 +85,22 @@ export default function AdminSettings() {
         setSaving(false);
     };
 
-    const handleManualToggle = async () => {
-        const newState = !isFormOpen;
+    const handleManualToggleAction = async (newState: boolean | null) => {
         setIsFormOpen(newState);
 
-        if (newState) {
-            // If opening manually, start a new batch
+        if (newState === true) {
             try {
                 await startNewBatch("MANUAL", new Date().toISOString());
             } catch (err) {
                 console.error("Error starting batch on manual open:", err);
-                // Continue to save state even if batch fails? Probably better to alert.
                 alert("Error starting new batch. Please try again.");
                 return;
             }
         }
 
-        // We need to save this state immediately as per previous logic, or just let the user click save?
-        // The previous logic didn't save on toggle, it just updated local state. 
-        // BUT, the toggle button implies immediate action usually. 
-        // Looking at previous code, it just updated state `setIsFormOpen(!isFormOpen)`.
-        // So the user had to click "Save All Settings".
-        // However, for "Open Form Manually" to be effective immediately, it usually implies a save.
-        // Let's keep it as local state update to be consistent with "Save All Settings" button,
-        // BUT `startNewBatch` writes to DB immediately. This is a bit inconsistent.
-        // If I start a batch but don't save "isFormOpen: true", then we have a batch but closed form.
-        // Ideally, "Open Form Manually" should probably be an immediate action.
-        // Let's make the toggle button save immediately for better UX and consistency with batch creation.
-
         try {
             await setDoc(doc(db, "settings", "global"), {
-                isFormOpen: newState
+                isFormOpen: newState === null ? null : newState
             }, { merge: true });
             setMessage(t("settings.savedSuccess"));
         } catch (err) {
@@ -138,20 +123,41 @@ export default function AdminSettings() {
                     {/* Manual Toggle Section */}
                     <div className="border-b pb-md">
                         <h3 className="font-bold mb-sm">{t("settings.manualControl")}</h3>
-                        <div className="flex items-center justify-between">
-                            <span>{t("settings.currentStatus")}:</span>
-                            <span className={`font-bold ${isFormOpen ? "text-green-600" : "text-red-600"}`} style={{ color: isFormOpen ? "var(--color-success)" : "var(--color-error)" }}>
-                                {isFormOpen ? t("settings.open") : t("settings.closed")}
-                            </span>
+                        <div className="flex flex-col gap-sm">
+                            <div className="flex items-center justify-between">
+                                <span>{t("settings.currentStatus")}:</span>
+                                <span className={`font-bold ${isFormOpen === true ? "text-green-600" : isFormOpen === false ? "text-red-600" : "text-blue-600"}`}>
+                                    {isFormOpen === true ? t("settings.open") : isFormOpen === false ? t("settings.closed") : t("settings.scheduledMode")}
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-sm">
+                                <button
+                                    onClick={() => handleManualToggleAction(true)}
+                                    className={`btn ${isFormOpen === true ? "btn-secondary" : "btn-primary"}`}
+                                >
+                                    {t("settings.openManually")}
+                                </button>
+                                <button
+                                    onClick={() => handleManualToggleAction(false)}
+                                    className={`btn ${isFormOpen === false ? "btn-secondary" : "btn-primary"}`}
+                                >
+                                    {t("settings.closeManually")}
+                                </button>
+                            </div>
+
+                            {isFormOpen !== null && (
+                                <button
+                                    onClick={() => handleManualToggleAction(null)}
+                                    className="btn btn-outline w-full"
+                                    style={{ border: "1px solid var(--color-primary)", color: "var(--color-primary)", background: "transparent" }}
+                                >
+                                    {t("settings.returnToSchedule")}
+                                </button>
+                            )}
                         </div>
-                        <button
-                            onClick={handleManualToggle}
-                            className={`btn mt-sm w-full ${isFormOpen ? "btn-secondary" : "btn-primary"}`}
-                        >
-                            {isFormOpen ? t("settings.closeManually") : t("settings.openManually")}
-                        </button>
                         <p className="text-xs text-muted mt-xs">
-                            {t("settings.note")}
+                            {isFormOpen === null ? t("settings.note") : t("settings.manualOverrideActive")}
                         </p>
                     </div>
 

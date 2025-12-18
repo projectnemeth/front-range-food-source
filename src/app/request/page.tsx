@@ -90,45 +90,68 @@ export default function RequestPage() {
                 if (response.ok) {
                     const data = await response.json();
 
-                    const manualOpen = data.isFormOpen;
+                    const manualOpenField = data.isFormOpen; // true, false, or undefined/null
                     const scheduledOpen = data.scheduledOpen;
                     const scheduledClose = data.scheduledClose;
                     setCurrentBatchId(data.currentBatchId || null);
-                    setNextPickupDate(data.nextPickupDate || "");
+
+                    // Priority: manual nextPickupDate if available
+                    const pickupDateFromDB = data.nextPickupDate || "";
+                    setNextPickupDate(pickupDateFromDB);
 
                     // Determine if open based on schedule or manual override
-                    let open = manualOpen === true;
+                    // Priority:
+                    // 1. manualOpenField === true -> OPEN
+                    // 2. manualOpenField === false -> CLOSED (Override Schedule)
+                    // 3. manualOpenField === null/undefined -> FOLLOW SCHEDULE
+
+                    let open = false;
                     let msg = "";
 
-                    if (scheduledOpen && scheduledClose) {
-                        const now = new Date();
-                        const openDate = new Date(scheduledOpen);
-                        const closeDate = new Date(scheduledClose);
+                    if (manualOpenField === true) {
+                        open = true;
+                    } else if (manualOpenField === false) {
+                        open = false;
+                        // Manual Close is absolute
+                    } else {
+                        // Follow Schedule (null or undefined)
+                        if (scheduledOpen && scheduledClose) {
+                            const now = new Date();
+                            const openDate = new Date(scheduledOpen);
+                            const closeDate = new Date(scheduledClose);
+                            const isScheduledOpen = now >= openDate && now <= closeDate;
 
-                        const isScheduledOpen = now >= openDate && now <= closeDate;
-
-                        if (isScheduledOpen) {
-                            open = true;
-                            msg = `${t("request.formClosesOn")} ${closeDate.toLocaleString()}`;
-                        } else if (now < openDate) {
-                            if (!open) {
+                            if (isScheduledOpen) {
+                                open = true;
+                                msg = `${t("request.formClosesOn")} ${closeDate.toLocaleString()}`;
+                            } else if (now < openDate) {
+                                open = false;
                                 msg = `${t("request.formOpensOn")} ${openDate.toLocaleString()}`;
                             } else {
-                                msg = `${t("request.formClosesOn")} ${closeDate.toLocaleString()}`;
-                            }
-                        } else if (now > closeDate) {
-                            if (!open) {
+                                open = false;
                                 msg = `${t("request.formClosedOn")} ${closeDate.toLocaleString()}`;
                             }
+                        } else {
+                            // No schedule and no manual override = closed
+                            open = false;
+                        }
+                    }
+
+                    // For UX: If manually open but we have a future close date from schedule, show it
+                    if (open && manualOpenField === true && scheduledClose) {
+                        const closeDate = new Date(scheduledClose);
+                        if (new Date() < closeDate) {
+                            msg = `${t("request.formClosesOn")} ${closeDate.toLocaleString()}`;
                         }
                     }
 
                     console.log("Form State Debug (API):", {
-                        manualOpen: manualOpen,
-                        currentOpenState: open,
+                        manualOpenValue: manualOpenField,
+                        finalOpenState: open,
                         now: new Date().toISOString(),
                         scheduledOpen,
-                        scheduledClose
+                        scheduledClose,
+                        nextPickupDate: pickupDateFromDB
                     });
 
                     setIsFormOpen(open);
