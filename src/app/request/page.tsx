@@ -153,19 +153,19 @@ export default function RequestPage() {
         const checkOrder = async () => {
             if (user && currentBatchId) {
                 try {
-                    const q = query(
-                        collection(db, "orders"),
-                        where("userId", "==", user.uid),
-                        where("batchId", "==", currentBatchId)
-                    );
-                    const snapshot = await getDocs(q);
-                    if (!snapshot.empty) {
-                        setHasOrdered(true);
-                    } else {
-                        setHasOrdered(false);
+                    const token = await user.getIdToken();
+                    const response = await fetch(`/api/orders/check?batchId=${currentBatchId}`, {
+                        headers: {
+                            "Authorization": `Bearer ${token}`
+                        }
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        setHasOrdered(data.hasOrdered);
                     }
                 } catch (err) {
-                    console.error("Error checking existing orders:", err);
+                    console.error("Error checking existing orders via API:", err);
                     setHasOrdered(false);
                 }
             }
@@ -224,34 +224,22 @@ export default function RequestPage() {
             const freshGoodsList = allSelected.filter(key => freshKeys.has(key));
             const dryGoodsList = allSelected.filter(key => !freshKeys.has(key));
 
-            await addDoc(collection(db, "orders"), {
-                userId: user.uid,
+            const orderPayload = {
                 userEmail: user.email,
                 userName: user.displayName,
-                items: items, // Rename to 'otherItems' in future but keep schema compatible for now
+                items: items,
                 otherItems: items,
                 selectedItems: allSelected,
-
-                // Track items for specific fulfillment parts
-                dryGoodsItems: dryGoodsList, // Part 1
-                freshGoodsItems: freshGoodsList, // Part 2
-
-                // Split fulfillment status
-                packingStatus: {
-                    dryGoods: "PENDING",
-                    freshGoods: "PENDING"
-                },
-
-                // New Fields
+                dryGoodsItems: dryGoodsList,
+                freshGoodsItems: freshGoodsList,
                 pickupDate: nextPickupDate,
                 confirmedPickup,
-
+                batchId: currentBatchId,
                 dietaryRestrictions: {
                     hasRestrictions: hasDietaryRestrictions,
                     glutenFreeCount: hasDietaryRestrictions ? glutenFreeCount : 0,
                     veganCount: hasDietaryRestrictions ? veganCount : 0,
                 },
-
                 babyNeeds: {
                     hasBaby,
                     needs: hasBaby ? {
@@ -263,30 +251,39 @@ export default function RequestPage() {
                         formulaType: babyNeeds.formula ? formulaType : "",
                         other: babyDetails
                     } : null
+                }
+            };
+
+            const token = await user.getIdToken();
+            const response = await fetch("/api/orders/submit", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
                 },
-
-                status: "PENDING",
-                createdAt: new Date().toISOString(),
-                batchId: currentBatchId
+                body: JSON.stringify(orderPayload)
             });
-            setMessage(t("request.successMessage"));
 
-            // Reset form
-            setItems("");
-            setConfirmedPickup(false);
-            setHasDietaryRestrictions(null);
-            setGlutenFreeCount(0);
-            setVeganCount(0);
-            setHasBaby(null);
-            setBabyNeeds({ diapers: false, formula: false });
-            setDiaperSize("");
-            setFormulaType("");
-            setBabyDetails("");
-            setDisclaimerAgreed(false);
-            setSelectedItems({});
-            setStep(1);
-
-            setHasOrdered(true);
+            if (response.ok) {
+                setMessage(t("request.successMessage"));
+                setHasOrdered(true);
+                // Reset form
+                setItems("");
+                setConfirmedPickup(false);
+                setHasDietaryRestrictions(null);
+                setGlutenFreeCount(0);
+                setVeganCount(0);
+                setHasBaby(null);
+                setBabyNeeds({ diapers: false, formula: false });
+                setDiaperSize("");
+                setFormulaType("");
+                setBabyDetails("");
+                setDisclaimerAgreed(false);
+                setSelectedItems({});
+                setStep(1);
+            } else {
+                throw new Error("Failed to submit order");
+            }
         } catch (err) {
             console.error(err);
             setMessage(t("request.errorMessage"));
