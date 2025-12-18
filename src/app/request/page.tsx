@@ -103,12 +103,21 @@ export default function RequestPage() {
                     const closeDate = new Date(scheduledClose);
 
                     if (now < openDate) {
-                        open = false;
-                        msg = `${t("request.formOpensOn")} ${openDate.toLocaleString()}`;
+                        // If manually open, we stay open but can show the upcoming schedule
+                        if (!manualOpen) {
+                            open = false;
+                            msg = `${t("request.formOpensOn")} ${openDate.toLocaleString()}`;
+                        } else {
+                            msg = `${t("request.formClosesOn")} ${closeDate.toLocaleString()}`;
+                        }
                     } else if (now > closeDate) {
-                        open = false;
-                        msg = `${t("request.formClosedOn")} ${closeDate.toLocaleString()}`;
+                        // If manually open, we stay open despite the schedule being in the past
+                        if (!manualOpen) {
+                            open = false;
+                            msg = `${t("request.formClosedOn")} ${closeDate.toLocaleString()}`;
+                        }
                     } else {
+                        // Within scheduled time
                         open = true;
                         msg = `${t("request.formClosesOn")} ${closeDate.toLocaleString()}`;
                     }
