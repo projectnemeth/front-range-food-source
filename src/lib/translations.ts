@@ -49,6 +49,9 @@ export const translations = {
             duplicateFoodBankId: "This Food Bank ID is already registered.",
             duplicateName: "This Name is already registered.",
             duplicateEmail: "This Email is already registered.",
+            finalizeError: "Failed to create your profile. Please contact support.",
+            invalidEmail: "The email address is invalid.",
+            weakPassword: "The password is too weak.",
             loginOrReset: "Please login or reset your password.",
         },
 
@@ -290,6 +293,9 @@ export const translations = {
             duplicateFoodBankId: "Este ID del Banco de Alimentos ya está registrado.",
             duplicateName: "Este nombre ya está registrado.",
             duplicateEmail: "Este correo electrónico ya está registrado.",
+            finalizeError: "Error al crear su perfil. Por favor contacte al soporte.",
+            invalidEmail: "La dirección de correo electrónico no es válida.",
+            weakPassword: "La contraseña es demasiado débil.",
             loginOrReset: "Por favor inicie sesión o restablezca su contraseña.",
         },
         request: {
@@ -531,6 +537,9 @@ export const translations = {
             duplicateFoodBankId: "Этот ID уже зарегистрирован.",
             duplicateName: "Это имя уже зарегистрировано.",
             duplicateEmail: "Этот email уже зарегистрирован.",
+            finalizeError: "Ошибка при создании вашего профиля. Пожалуйста, свяжитесь с поддержкой.",
+            invalidEmail: "Некорректный адрес электронной почты.",
+            weakPassword: "Пароль слишком слабый.",
             loginOrReset: "Пожалуйста, войдите или сбросьте пароль.",
         },
         request: {

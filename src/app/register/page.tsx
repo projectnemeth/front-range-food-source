@@ -104,22 +104,39 @@ export default function RegisterPage() {
         } catch (err: any) {
             console.error("Registration error:", err);
 
-            let errorMsg = t("register.failed");
-            const loginResetMsg = ` ${t("register.loginOrReset")}`;
+            let errorKey = "register.failed";
+            let showLoginReset = false;
 
-            if (err.message === "duplicatePhone") {
-                errorMsg = t("register.duplicatePhone") + loginResetMsg;
-            } else if (err.message === "duplicateAddress") {
-                errorMsg = t("register.duplicateAddress") + loginResetMsg;
-            } else if (err.message === "duplicateFoodBankId") {
-                errorMsg = t("register.duplicateFoodBankId") + loginResetMsg;
-            } else if (err.message === "duplicateName") {
-                errorMsg = t("register.duplicateName") + loginResetMsg;
-            } else if (err.code === "auth/email-already-in-use") {
-                errorMsg = t("register.duplicateEmail") + loginResetMsg;
-            } else if (err.message) {
-                // Fallback for other errors
-                errorMsg = err.message;
+            const message = err.message;
+            const code = err.code;
+
+            // Mapping errors to translation keys
+            if (message === "duplicatePhone") {
+                errorKey = "register.duplicatePhone";
+                showLoginReset = true;
+            } else if (message === "duplicateAddress") {
+                errorKey = "register.duplicateAddress";
+                showLoginReset = true;
+            } else if (message === "duplicateFoodBankId") {
+                errorKey = "register.duplicateFoodBankId";
+                showLoginReset = true;
+            } else if (message === "duplicateName") {
+                errorKey = "register.duplicateName";
+                showLoginReset = true;
+            } else if (code === "auth/email-already-in-use") {
+                errorKey = "register.duplicateEmail";
+                showLoginReset = true;
+            } else if (code === "auth/invalid-email") {
+                errorKey = "register.invalidEmail";
+            } else if (code === "auth/weak-password") {
+                errorKey = "register.weakPassword";
+            } else if (message === "finalizeError") {
+                errorKey = "register.finalizeError";
+            }
+
+            let errorMsg = t(errorKey);
+            if (showLoginReset) {
+                errorMsg += ` ${t("register.loginOrReset")}`;
             }
 
             setError(errorMsg);
