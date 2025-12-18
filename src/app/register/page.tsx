@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { auth, db } from "@/lib/firebase";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { createUserWithEmailAndPassword, updateProfile, deleteUser } from "firebase/auth";
 import { doc, setDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { useLanguage } from "@/context/LanguageContext";
 
@@ -42,71 +42,78 @@ export default function RegisterPage() {
         setLoading(true);
 
         try {
-            // 1. Check for duplicates in Firestore
-            const usersRef = collection(db, "users");
-
-            // Check Phone
-            const phoneQ = query(usersRef, where("phone", "==", phone));
-            const phoneSnap = await getDocs(phoneQ);
-            if (!phoneSnap.empty) {
-                throw new Error("duplicatePhone");
-            }
-
-            // Check Address
-            const addressQ = query(usersRef, where("address", "==", address));
-            const addressSnap = await getDocs(addressQ);
-            if (!addressSnap.empty) {
-                throw new Error("duplicateAddress");
-            }
-
-            // Check Food Bank ID (if provided)
-            if (foodBankId) {
-                const idQ = query(usersRef, where("foodBankId", "==", foodBankId));
-                const idSnap = await getDocs(idQ);
-                if (!idSnap.empty) {
-                    throw new Error("duplicateFoodBankId");
-                }
-            }
-
-            // Check Name (First + Last)
-            const nameQ = query(usersRef, where("firstName", "==", firstName), where("lastName", "==", lastName));
-            const nameSnap = await getDocs(nameQ);
-            if (!nameSnap.empty) {
-                throw new Error("duplicateName");
-            }
-
-            // 2. Create User in Auth
+            // 1. Create User in Auth FIRST so we have permissions to query DB
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
-            // Update profile
-            await updateProfile(user, { displayName: `${firstName} ${lastName}` });
+            try {
+                // 2. Check for duplicates in Firestore
+                const usersRef = collection(db, "users");
 
-            // 3. Generate Family ID (if not provided)
-            const finalFoodBankId = foodBankId || `FB-${Date.now().toString().slice(-6)}`;
+                // Check Phone
+                const phoneQ = query(usersRef, where("phone", "==", phone));
+                const phoneSnap = await getDocs(phoneQ);
+                if (!phoneSnap.empty) {
+                    throw new Error("duplicatePhone");
+                }
 
-            // 4. Store additional details in Firestore
-            await setDoc(doc(db, "users", user.uid), {
-                uid: user.uid,
-                email: user.email,
-                firstName,
-                lastName,
-                displayName: `${firstName} ${lastName}`,
-                address,
-                phone,
-                county,
-                foodBankId: finalFoodBankId,
-                familySize: {
-                    adults,
-                    children,
-                    seniors,
-                    total: Number(adults) + Number(children) + Number(seniors)
-                },
-                role: "USER",
-                createdAt: new Date().toISOString()
-            });
+                // Check Address
+                const addressQ = query(usersRef, where("address", "==", address));
+                const addressSnap = await getDocs(addressQ);
+                if (!addressSnap.empty) {
+                    throw new Error("duplicateAddress");
+                }
 
-            router.push("/");
+                // Check Food Bank ID (if provided)
+                if (foodBankId) {
+                    const idQ = query(usersRef, where("foodBankId", "==", foodBankId));
+                    const idSnap = await getDocs(idQ);
+                    if (!idSnap.empty) {
+                        throw new Error("duplicateFoodBankId");
+                    }
+                }
+
+                // Check Name (First + Last)
+                const nameQ = query(usersRef, where("firstName", "==", firstName), where("lastName", "==", lastName));
+                const nameSnap = await getDocs(nameQ);
+                if (!nameSnap.empty) {
+                    throw new Error("duplicateName");
+                }
+
+                // 3. Update profile
+                await updateProfile(user, { displayName: `${firstName} ${lastName}` });
+
+                // 4. Generate Family ID (if not provided)
+                const finalFoodBankId = foodBankId || `FB-${Date.now().toString().slice(-6)}`;
+
+                // 5. Store additional details in Firestore
+                await setDoc(doc(db, "users", user.uid), {
+                    uid: user.uid,
+                    email: user.email,
+                    firstName,
+                    lastName,
+                    displayName: `${firstName} ${lastName}`,
+                    address,
+                    phone,
+                    county,
+                    foodBankId: finalFoodBankId,
+                    familySize: {
+                        adults,
+                        children,
+                        seniors,
+                        total: Number(adults) + Number(children) + Number(seniors)
+                    },
+                    role: "USER",
+                    createdAt: new Date().toISOString()
+                });
+
+                router.push("/");
+            } catch (innerErr) {
+                // If validation failed or DB write failed, clean up the Auth user
+                await deleteUser(user);
+                throw innerErr; // Propagate error to outer handler
+            }
+
         } catch (err: any) {
             console.error("Registration error:", err);
 
