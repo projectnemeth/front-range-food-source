@@ -9,15 +9,15 @@ export default function LanguageSwitcher() {
         <div className="flex gap-xs">
             <button
                 onClick={() => setLanguage("en")}
-                className={`px-2 py-1 text-sm rounded ${language === "en" ? "bg-primary text-white font-bold" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                className={`px-3 py-2 text-sm rounded flex items-center gap-2 ${language === "en" ? "bg-primary text-white font-bold" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
             >
-                English
+                <span>🇺🇸</span> English
             </button>
             <button
                 onClick={() => setLanguage("es")}
-                className={`px-2 py-1 text-sm rounded ${language === "es" ? "bg-primary text-white font-bold" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+                className={`px-3 py-2 text-sm rounded flex items-center gap-2 ${language === "es" ? "bg-primary text-white font-bold" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
             >
-                Español
+                <span>🇲🇽</span> Español
             </button>
         </div>
     );
