@@ -1,225 +1,205 @@
 "use client";
-
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { useRouter } from "next/navigation";
-import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import Link from "next/link";
 import { useLanguage } from "@/context/LanguageContext";
-import { startNewBatch } from "@/lib/batchUtils";
-
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { api } from "@/lib/client-api";
+import { formatPickupDate } from "@/lib/dates";
+import { message } from "@/lib/messages";
+interface Batch {
+  id: string;
+  pickupDate: string;
+  scheduledOpen: string;
+  scheduledClose: string;
+}
+interface Settings {
+  isFormOpen: boolean | null;
+  activeBatch: Batch | null;
+  pendingBatch: Batch | null;
+}
 export default function AdminSettings() {
-    const { user, profile, loading } = useAuth();
-    const router = useRouter();
-    const { t } = useLanguage();
-    const [isFormOpen, setIsFormOpen] = useState<boolean | null>(null);
-    const [scheduledOpen, setScheduledOpen] = useState("");
-    const [scheduledClose, setScheduledClose] = useState("");
-    const [nextPickupDate, setNextPickupDate] = useState("");
-    const [loadingSettings, setLoadingSettings] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [message, setMessage] = useState("");
-
-    useEffect(() => {
-        if (!loading) {
-            if (!user || profile?.role !== "ADMIN") {
-                router.push("/");
-            } else {
-                fetchSettings();
-            }
-        }
-    }, [user, profile, loading, router]);
-
-    const fetchSettings = async () => {
-        try {
-            const docRef = doc(db, "settings", "global");
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                setIsFormOpen(data.isFormOpen !== undefined ? data.isFormOpen : null);
-                setScheduledOpen(data.scheduledOpen || "");
-                setScheduledClose(data.scheduledClose || "");
-                setNextPickupDate(data.nextPickupDate || "");
-            }
-        } catch (err) {
-            console.error("Error fetching settings:", err);
-        } finally {
-            setLoadingSettings(false);
-        }
-    };
-
-    const handleSave = async () => {
-        // Validation: Check if scheduling open but no pickup date
-        if (scheduledOpen && !nextPickupDate) {
-            const confirmed = window.confirm(t("settings.pickupDateWarning"));
-            if (!confirmed) {
-                return;
-            }
-        }
-
-        setSaving(true);
-        setMessage("");
-        try {
-            // Check if a new scheduled open time is being set
-            const docRef = doc(db, "settings", "global");
-            const docSnap = await getDoc(docRef);
-            const currentScheduledOpen = docSnap.exists() ? docSnap.data().scheduledOpen : "";
-
-            if (scheduledOpen && scheduledOpen !== currentScheduledOpen) {
-                // Start a new batch for the new schedule
-                await startNewBatch("SCHEDULED", scheduledOpen);
-            }
-
-            await setDoc(doc(db, "settings", "global"), {
-                isFormOpen,
-                scheduledOpen,
-                scheduledClose,
-                nextPickupDate
-            }, { merge: true });
-            setMessage(t("settings.savedSuccess"));
-        } catch (err) {
-            console.error("Error saving settings:", err);
-            setMessage(t("settings.saveError"));
-        }
-        setSaving(false);
-    };
-
-    const handleManualToggleAction = async (newState: boolean | null) => {
-        setIsFormOpen(newState);
-
-        if (newState === true) {
-            try {
-                await startNewBatch("MANUAL", new Date().toISOString());
-            } catch (err) {
-                console.error("Error starting batch on manual open:", err);
-                alert("Error starting new batch. Please try again.");
-                return;
-            }
-        }
-
-        try {
-            await setDoc(doc(db, "settings", "global"), {
-                isFormOpen: newState === null ? null : newState
-            }, { merge: true });
-            setMessage(t("settings.savedSuccess"));
-        } catch (err) {
-            console.error("Error saving manual toggle:", err);
-            setMessage(t("settings.saveError"));
-        }
-    };
-
-    if (loading || loadingSettings) return <div className="text-center mt-md">{t("common.loading")}</div>;
-
-    if (profile?.role !== "ADMIN") return null;
-
+  const { user, profile, loading, profileError, refreshProfile } = useAuth();
+  const { t, language } = useLanguage();
+  const router = useRouter();
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [pickupDate, setPickupDate] = useState("");
+  const [scheduledOpen, setOpen] = useState("");
+  const [scheduledClose, setClose] = useState("");
+  const [openOffset, setOpenOffset] = useState("");
+  const [closeOffset, setCloseOffset] = useState("");
+  const load = useCallback(async () => {
+    try {
+      setSettings(await api<Settings>("/api/admin/settings"));
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "serverError");
+    }
+  }, []);
+  useEffect(() => {
+    if (loading) return;
+    if (!user || profile?.role !== "ADMIN") {
+      if (!profileError) router.replace("/");
+      return;
+    }
+    const timer = setTimeout(() => void load(), 0);
+    return () => clearTimeout(timer);
+  }, [loading, user, profile, profileError, router, load]);
+  const save = async (body: unknown) => {
+    if (saving) return;
+    setSaving(true);
+    setSaved(false);
+    setError("");
+    try {
+      await api("/api/admin/settings", body);
+      await load();
+      setSaved(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "serverError");
+    } finally {
+      setSaving(false);
+    }
+  };
+  if (profileError)
     return (
-        <div className="flex justify-center">
-            <div className="card" style={{ width: "100%", maxWidth: "500px" }}>
-                <h1 className="text-xl font-bold mb-md text-center">{t("settings.title")}</h1>
-
-                <div className="flex flex-col gap-md">
-
-                    {/* Manual Toggle Section */}
-                    <div className="border-b pb-md">
-                        <h3 className="font-bold mb-sm">{t("settings.manualControl")}</h3>
-                        <div className="flex flex-col gap-sm">
-                            <div className="flex items-center justify-between">
-                                <span>{t("settings.currentStatus")}:</span>
-                                <span className={`font-bold ${isFormOpen === true ? "text-green-600" : isFormOpen === false ? "text-red-600" : "text-blue-600"}`}>
-                                    {isFormOpen === true ? t("settings.open") : isFormOpen === false ? t("settings.closed") : t("settings.scheduledMode")}
-                                </span>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-sm">
-                                <button
-                                    onClick={() => handleManualToggleAction(true)}
-                                    className={`btn ${isFormOpen === true ? "btn-secondary" : "btn-primary"}`}
-                                >
-                                    {t("settings.openManually")}
-                                </button>
-                                <button
-                                    onClick={() => handleManualToggleAction(false)}
-                                    className={`btn ${isFormOpen === false ? "btn-secondary" : "btn-primary"}`}
-                                >
-                                    {t("settings.closeManually")}
-                                </button>
-                            </div>
-
-                            {isFormOpen !== null && (
-                                <button
-                                    onClick={() => handleManualToggleAction(null)}
-                                    className="btn btn-outline w-full"
-                                    style={{ border: "1px solid var(--color-primary)", color: "var(--color-primary)", background: "transparent" }}
-                                >
-                                    {t("settings.returnToSchedule")}
-                                </button>
-                            )}
-                        </div>
-                        <p className="text-xs text-muted mt-xs">
-                            {isFormOpen === null ? t("settings.note") : t("settings.manualOverrideActive")}
-                        </p>
-                    </div>
-
-                    {/* Scheduling Section */}
-                    <div>
-                        <h3 className="font-bold mb-sm">{t("settings.scheduledAvailability")}</h3>
-                        <div className="flex flex-col gap-sm">
-                            <div>
-                                <label className="label">{t("settings.opensAt")}</label>
-                                <input
-                                    type="datetime-local"
-                                    className="input"
-                                    value={scheduledOpen}
-                                    onChange={(e) => setScheduledOpen(e.target.value)}
-                                />
-                            </div>
-                            <div>
-                                <label className="label">{t("settings.closesAt")}</label>
-                                <input
-                                    type="datetime-local"
-                                    className="input"
-                                    value={scheduledClose}
-                                    onChange={(e) => setScheduledClose(e.target.value)}
-                                />
-                            </div>
-
-                            {/* Next Pick-up Date */}
-                            <div>
-                                <label className="label">{t("settings.nextPickupDate")}</label>
-                                <input
-                                    type="date"
-                                    className="input"
-                                    value={nextPickupDate}
-                                    onChange={(e) => setNextPickupDate(e.target.value)}
-                                />
-                            </div>
-
-                            <button
-                                onClick={() => { setScheduledOpen(""); setScheduledClose(""); setNextPickupDate(""); }}
-                                className="text-sm text-red-600 underline text-left"
-                            >
-                                {t("settings.clearSchedule")}
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="mt-md">
-                        <button
-                            onClick={handleSave}
-                            className="btn btn-primary w-full"
-                            disabled={saving}
-                        >
-                            {saving ? t("settings.saving") : t("settings.save")}
-                        </button>
-                        {message && <p className="text-center text-sm mt-sm">{message}</p>}
-                    </div>
-
-                    <Link href="/admin" className="text-sm text-muted mt-sm text-center underline">
-                        {t("common.backToDashboard")}
-                    </Link>
-                </div>
-            </div>
-        </div>
+      <p>
+        {t("fix.profileError")}{" "}
+        <button onClick={() => void refreshProfile()}>{t("fix.retry")}</button>
+      </p>
     );
+  if (loading) return <p>{t("common.loading")}</p>;
+  if (profile?.role !== "ADMIN") return null;
+  return (
+    <div className="card" style={{ maxWidth: 600, margin: "auto" }}>
+      <h1>{t("settings.title")}</h1>
+      {error && (
+        <p role="alert">
+          {message(language, error)}{" "}
+          <button onClick={() => void load()}>{t("fix.retry")}</button>
+        </p>
+      )}
+      {!settings && !error && <p>{t("common.loading")}</p>}
+      {settings && (
+        <>
+          <h2>
+            {t("fix.active")}:{" "}
+            {settings.activeBatch
+              ? formatPickupDate(settings.activeBatch.pickupDate, language)
+              : t("fix.noBatch")}
+          </h2>
+          <p>
+            {t("settings.currentStatus")}:{" "}
+            {settings.isFormOpen === true
+              ? t("settings.open")
+              : settings.isFormOpen === false
+                ? t("settings.closed")
+                : t("settings.scheduledMode")}
+          </p>
+          <div className="flex gap-md">
+            <button
+              className="btn btn-primary"
+              disabled={saving || !settings.activeBatch}
+              onClick={() => void save({ action: "toggle", isFormOpen: true })}
+            >
+              {t("settings.openManually")}
+            </button>
+            <button
+              className="btn btn-secondary"
+              disabled={saving || !settings.activeBatch}
+              onClick={() => void save({ action: "toggle", isFormOpen: false })}
+            >
+              {t("settings.closeManually")}
+            </button>
+          </div>
+          <button
+            className="btn btn-secondary mt-md"
+            disabled={saving || !settings.activeBatch}
+            onClick={() => void save({ action: "toggle", isFormOpen: null })}
+          >
+            {t("settings.returnToSchedule")}
+          </button>
+          {settings.pendingBatch && (
+            <p>
+              {t("fix.future")}:{" "}
+              {formatPickupDate(settings.pendingBatch.pickupDate, language)}
+            </p>
+          )}
+        </>
+      )}
+      <h2>{t("fix.create")}</h2>
+      <p>{t("fix.createHelp")}</p>
+      <p>{t("fix.zone")}</p>
+      <form
+        className="flex flex-col gap-md"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save({
+            action: "create",
+            pickupDate,
+            scheduledOpen,
+            scheduledClose,
+            ...(openOffset ? { openOffset } : {}),
+            ...(closeOffset ? { closeOffset } : {}),
+          });
+        }}
+      >
+        <label>
+          {t("fix.pickup")}
+          <input
+            type="date"
+            className="input"
+            required
+            value={pickupDate}
+            onChange={(e) => setPickupDate(e.target.value)}
+          />
+        </label>
+        <label>
+          {t("settings.opensAt")}
+          <input
+            type="datetime-local"
+            className="input"
+            value={scheduledOpen}
+            onChange={(e) => setOpen(e.target.value)}
+          />
+        </label>
+        <label>
+          {t("settings.closesAt")}
+          <input
+            type="datetime-local"
+            className="input"
+            value={scheduledClose}
+            onChange={(e) => setClose(e.target.value)}
+          />
+        </label>
+        <label>
+          {t("fix.openOffset")}
+          <input
+            className="input"
+            placeholder="-06:00"
+            pattern="[+-][0-9]{2}:[0-9]{2}"
+            value={openOffset}
+            onChange={(e) => setOpenOffset(e.target.value)}
+          />
+        </label>
+        <label>
+          {t("fix.closeOffset")}
+          <input
+            className="input"
+            placeholder="-07:00"
+            pattern="[+-][0-9]{2}:[0-9]{2}"
+            value={closeOffset}
+            onChange={(e) => setCloseOffset(e.target.value)}
+          />
+        </label>
+        <button className="btn btn-primary" disabled={saving || !settings}>
+          {saving ? t("settings.saving") : t("fix.create")}
+        </button>
+      </form>
+      {saved && <p role="status">{t("fix.saved")}</p>}
+      <Link href="/admin">{t("common.backToDashboard")}</Link>
+    </div>
+  );
 }

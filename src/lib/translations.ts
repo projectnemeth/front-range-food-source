@@ -146,6 +146,7 @@ export const translations = {
                 snacks: "Snacks",
                 drinks: "Drinks",
                 freshRefrigerated: "Fresh & Refrigerated Items",
+                frozen: "Frozen Meat and Prepared Meals",
                 requestedItems: "Requested Items:",
             },
             items: {

@@ -1,60 +1,76 @@
 "use client";
-
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
 import { translations } from "@/lib/translations";
-
+import { messages } from "@/lib/messages";
 type Language = "en" | "es" | "ru";
-
+const valid = (v: string | null): v is Language =>
+  v === "en" || v === "es" || v === "ru";
 interface LanguageContextType {
-    language: Language;
-    setLanguage: (lang: Language) => void;
-    t: (key: string) => string;
+  language: Language;
+  setLanguage: (language: Language) => void;
+  t: (key: string) => string;
 }
-
-const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
-
+const LanguageContext = createContext<LanguageContextType | undefined>(
+  undefined,
+);
 export function LanguageProvider({ children }: { children: ReactNode }) {
-    const [language, setLanguage] = useState<Language>("en");
-
-    // Optional: Load from local storage on mount
-    useEffect(() => {
-        const storedLang = localStorage.getItem("language") as Language;
-        if (storedLang && (storedLang === "en" || storedLang === "es")) {
-            setLanguage(storedLang);
-        }
-    }, []);
-
-    const handleSetLanguage = (lang: Language) => {
-        setLanguage(lang);
-        localStorage.setItem("language", lang);
+  const [language, setLanguage] = useState<Language>("en");
+  useEffect(() => {
+    const restore = () => {
+      try {
+        const stored = localStorage.getItem("language");
+        if (valid(stored)) setLanguage(stored);
+      } catch {
+        /* Storage may be disabled. */
+      }
     };
-
-    const t = (path: string): string => {
-        const keys = path.split(".");
-        let current: any = translations[language];
-
-        for (const key of keys) {
-            if (current[key] === undefined) {
-                console.warn(`Translation missing for key: ${path} in language: ${language}`);
-                return path;
-            }
-            current = current[key];
-        }
-
-        return current as string;
+    // Defer external storage restoration until hydration has completed.
+    const timer = setTimeout(restore, 0);
+    window.addEventListener("storage", restore);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("storage", restore);
     };
-
-    return (
-        <LanguageContext.Provider value={{ language, setLanguage: handleSetLanguage, t }}>
-            {children}
-        </LanguageContext.Provider>
-    );
+  }, []);
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
+  const select = useCallback((lang: Language) => {
+    setLanguage(lang);
+    try {
+      localStorage.setItem("language", lang);
+    } catch {}
+  }, []);
+  const t = useCallback(
+    (path: string): string => {
+      let value: unknown = path.startsWith("fix.")
+        ? messages[language]
+        : translations[language];
+      for (const key of (path.startsWith("fix.") ? path.slice(4) : path).split(
+        ".",
+      )) {
+        if (!value || typeof value !== "object" || !(key in value)) return path;
+        value = (value as Record<string, unknown>)[key];
+      }
+      return typeof value === "string" ? value : path;
+    },
+    [language],
+  );
+  return (
+    <LanguageContext.Provider value={{ language, setLanguage: select, t }}>
+      {children}
+    </LanguageContext.Provider>
+  );
 }
-
 export function useLanguage() {
-    const context = useContext(LanguageContext);
-    if (context === undefined) {
-        throw new Error("useLanguage must be used within a LanguageProvider");
-    }
-    return context;
+  const value = useContext(LanguageContext);
+  if (!value) throw new Error("LanguageProvider required");
+  return value;
 }

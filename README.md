@@ -7,3 +7,8 @@ It's a work in progress with new features added each week.
 Version: 0.5
 
 Readme last updated: 12/18/25 at 9:15 MT
+
+
+## Development and remediation
+
+See [deployment and verification](docs/deployment.md) for setup, checks, Firebase rules, and the required existing-data cutover. The [remediation specification](docs/remediation-spec.md) defines the acceptance criteria.

@@ -1,30 +1,23 @@
 import { NextResponse } from "next/server";
-import { adminDb, adminAuth } from "@/lib/firebase-admin";
-
+import { adminDb } from "@/lib/firebase-admin";
+import { identity, failure, HttpError } from "@/lib/server/http";
 export async function GET(request: Request) {
-    try {
-        const { searchParams } = new URL(request.url);
-        const batchId = searchParams.get("batchId");
-
-        const authHeader = request.headers.get("Authorization");
-        if (!authHeader || !authHeader.startsWith("Bearer ") || !batchId) {
-            return NextResponse.json({ error: "Unauthorized or missing parameters" }, { status: 401 });
-        }
-
-        const idToken = authHeader.split("Bearer ")[1];
-        const decodedToken = await adminAuth.verifyIdToken(idToken);
-        const uid = decodedToken.uid;
-
-        const ordersRef = adminDb.collection("orders");
-        const snapshot = await ordersRef
-            .where("userId", "==", uid)
-            .where("batchId", "==", batchId)
-            .limit(1)
-            .get();
-
-        return NextResponse.json({ hasOrdered: !snapshot.empty });
-    } catch (error) {
-        console.error("Error checking order via API:", error);
-        return NextResponse.json({ error: "Failed to check order" }, { status: 500 });
-    }
+  try {
+    const { uid } = await identity(request);
+    const batchId = new URL(request.url).searchParams.get("batchId");
+    if (!batchId || !/^[\w-]{1,150}$/.test(batchId))
+      throw new HttpError(400, "invalidInput");
+    const snapshot = await adminDb
+      .collection("orders")
+      .where("userId", "==", uid)
+      .where("batchId", "==", batchId)
+      .limit(1)
+      .get();
+    return NextResponse.json(
+      { hasOrdered: !snapshot.empty },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
+  } catch (e) {
+    return failure(e);
+  }
 }

@@ -1,48 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase-admin';
-
-export async function POST(req: NextRequest) {
-    console.log('API Route: /api/finalize-registration called');
-
-    try {
-        const body = await req.json();
-        const {
-            uid,
-            email,
-            firstName,
-            lastName,
-            address,
-            phone,
-            county,
-            foodBankId,
-            familySize
-        } = body;
-
-        if (!uid) {
-            return NextResponse.json({ error: 'Missing UID' }, { status: 400 });
-        }
-
-        console.log(`Creating profile for user: ${uid}`);
-
-        await adminDb.collection('users').doc(uid).set({
-            uid,
-            email,
-            firstName,
-            lastName,
-            displayName: `${firstName} ${lastName}`,
-            address,
-            phone,
-            county,
-            foodBankId,
-            familySize,
-            role: "USER",
-            createdAt: new Date().toISOString()
-        });
-
-        console.log('Profile created successfully');
-        return NextResponse.json({ success: true });
-    } catch (error) {
-        console.error('API finalize-registration error:', error);
-        return NextResponse.json({ error: 'serverError' }, { status: 500 });
-    }
+import { NextResponse } from "next/server";
+import { identity, failure, json, HttpError } from "@/lib/server/http";
+import { finalizeProfile } from "@/lib/server/profiles";
+import { rateLimit } from "@/lib/server/rate-limit";
+export async function POST(request: Request) {
+  try {
+    const token = await identity(request);
+    if (!token.email) throw new HttpError(400, "invalidInput");
+    await rateLimit(token.uid, "registration", 10);
+    return NextResponse.json(
+      await finalizeProfile(token.uid, token.email, await json(request)),
+    );
+  } catch (e) {
+    return failure(e);
+  }
 }

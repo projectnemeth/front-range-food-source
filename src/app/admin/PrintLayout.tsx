@@ -1,234 +1,169 @@
-import React from 'react';
-
-// Reusing the Order interface (subset) compatible with AdminDashboard
-export interface PrintOrder {
-    id: string;
-    userId: string;
-    userName: string;
-    userPhone?: string; // We will populate this from the user profile
-    dryGoodsItems?: string[];
-    freshGoodsItems?: string[];
-    otherItems?: string; // Legacy "items" or new "otherItems"
-    pickupDate?: string;
-    batchId?: string;
-    createdAt: string;
+"use client";
+import { useLayoutEffect, useRef } from "react";
+import type { Order } from "@/lib/schemas";
+import { checklistConfig, freshKeys } from "@/lib/catalog";
+import { formatPickupDate } from "@/lib/dates";
+export type PrintOrder = Order;
+function chunks(value: string): string[] {
+  const result: string[] = [];
+  let line = "";
+  for (const word of value.match(/\S+\s*|\s+/g) ?? []) {
+    for (const token of word.match(/[\s\S]{1,120}/g) ?? []) {
+      if (line.length + token.length > 160) {
+        result.push(line);
+        line = "";
+      }
+      line += token;
+    }
+  }
+  if (line) result.push(line);
+  return result;
 }
-
-interface PrintLayoutProps {
-    orders: PrintOrder[];
-    t: (key: string) => string;
-    language: string;
-}
-
-// Config must match RequestPage (copied for stability)
-const checklistConfig = {
-    pantry: [
-        "pastaSauce", "macNCheese", "rice", "skilletMeals", "cannedChicken",
-        "cannedTuna", "cannedFish", "mashedPotatoes", "ramen", "cannedGoods",
-        "applesauce", "refriedBeans", "blackBeans", "pintoBeans"
-    ],
-    additionalPantry: [
-        "bakingSupplies", "broth", "spices", "peanutButter", "jelly", "condiments",
-        "coffeeWhole", "coffeeGround", "coffeeKCups", "tea", "cereal",
-        "oatmeal", "pancakes", "syrup"
-    ],
-    drinks: [
-        "hotChocolate", "generalDrinks", "energyDrinks", "juice"
-    ],
-    homeGoods: [
-        "dishwasherDetergent", "laundrySoap", "dishSoap", "multiPurposeCleaner",
-        "bodyWash", "shampoo", "conditioner"
-    ],
-    petSupplies: [
-        "catFoodDry", "catFoodWet", "catTreats", "catLitter",
-        "dogFoodDry", "dogFoodWet", "dogTreats"
-    ],
-    snacks: [
-        "snacks", "candy"
-    ],
-    freshRefrigerated: [
-        "bread", "milkDairy", "milkNonDairy", "eggs", "otherDairy",
-        "pastries", "freshFruits", "freshVegetables", "freshJuice"
-    ],
-    frozen: [
-        "beef", "chicken", "fish", "ham", "turkey", "pork",
-        "sausage", "preparedMeals", "gfPreparedMeals", "veganPreparedMeals",
-        "frozenVegetables", "frozenFruit", "iceCream"
-    ]
-};
-
-export default function PrintLayout({ orders, t, language }: PrintLayoutProps) {
-
-    const getTranslatedItemName = (key: string) => {
-        // We try to find the key in one of the sections
-        const sections = [
-            'pantry', 'additionalPantry', 'drinks', 'homeGoods', 'petSupplies', 'snacks',
-            'freshRefrigerated', 'frozen'
-        ];
-
-        // Direct lookup via t function logic
-        // The structure in translations.ts is request.items.[key]
-        // We can just rely on that generic path if keys are unique (they are).
-        return t(`request.items.${key}`);
-    };
-
-    // Helper to categorize items for display
-    const getGroupedItems = (itemKeys: string[] | undefined, filterSections: string[]) => {
-        if (!itemKeys || itemKeys.length === 0) return null;
-        const groups: Record<string, string[]> = {};
-
-        filterSections.forEach(section => {
-            // @ts-ignore
-            const sectionKeys = checklistConfig[section] as string[];
-            const found = itemKeys.filter(k => sectionKeys.includes(k));
-            if (found.length > 0) {
-                groups[section] = found;
-            }
-        });
-
-        return groups;
-    };
-
-    return (
-        <div id="print-container" style={{ visibility: 'hidden' }}> {/* Initially hidden, shown by @media print */}
-            {orders.map((order) => {
-                const dryGroups = getGroupedItems(order.dryGoodsItems, ['pantry', 'additionalPantry', 'drinks', 'homeGoods', 'petSupplies', 'snacks']);
-                const freshGroups = getGroupedItems(order.freshGoodsItems, ['freshRefrigerated', 'frozen']);
-
-                // Format Pickup Date
-                const pickupDate = order.pickupDate ? new Date(order.pickupDate).toLocaleDateString() : "N/A";
-
-                return (
-                    <div key={order.id}>
-                        {/* ========================================================================================== */}
-                        {/* PAGE 1: DRY GOODS (Part 1) */}
-                        {/* ========================================================================================== */}
-                        <div className="print-page page-break" style={{ padding: '2rem' }}>
-                            {/* Header */}
-                            <div style={{ borderBottom: '2px solid black', paddingBottom: '1rem', marginBottom: '2rem' }}>
-                                <div style={{ fontSize: '3rem', fontWeight: 'bold' }}>
-                                    {order.userName}
-                                </div>
-                                <div style={{ fontSize: '2rem', marginTop: '0.5rem' }}>
-                                    {order.userPhone || "No Phone"}
-                                </div>
-                                <div style={{ marginTop: '1rem', fontSize: '1.2rem' }}>
-                                    <strong>Pickup Date:</strong> {pickupDate}
-                                </div>
-                                <div style={{ marginTop: '0.5rem', color: '#666' }}>
-                                    Order ID: {order.id.slice(0, 8)}
-                                </div>
-                            </div>
-
-                            {/* Verification/Internal Use Box */}
-                            <div style={{ border: '1px solid #ccc', padding: '1rem', marginBottom: '2rem', backgroundColor: '#f9f9f9', display: 'flex', justifyContent: 'space-between' }}>
-                                <div>
-                                    <strong>Part 1: Dry Goods & Household</strong>
-                                </div>
-                                <div style={{ display: 'flex', gap: '2rem' }}>
-                                    <span>[ ] Packed</span>
-                                    <span>[ ] Picked Up</span>
-                                </div>
-                            </div>
-
-                            {/* Dry Goods List */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-                                {dryGroups && Object.keys(dryGroups).map(section => (
-                                    <div key={section} style={{ marginBottom: '1.5rem', breakInside: 'avoid' }}>
-                                        <h3 style={{ textTransform: 'uppercase', borderBottom: '1px solid #eee', marginBottom: '0.5rem', fontSize: '0.9rem', color: '#444' }}>
-                                            {t(`request.sections.${section}`)}
-                                        </h3>
-                                        <ul style={{ listStyle: 'none', padding: 0 }}>
-                                            {dryGroups[section].map(key => (
-                                                <li key={key} style={{ padding: '0.25rem 0', borderBottom: '1px dashed #eee', fontSize: '1.1rem' }}>
-                                                    <span style={{ display: 'inline-block', width: '20px', height: '20px', border: '1px solid #333', marginRight: '10px', verticalAlign: 'middle' }}></span>
-                                                    {getTranslatedItemName(key)}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* Other Items */}
-                            {order.otherItems && (
-                                <div style={{ marginTop: '2rem', padding: '1rem', border: '1px solid #eee', borderRadius: '4px' }}>
-                                    <strong>Other Items / Notes:</strong>
-                                    <p style={{ whiteSpace: 'pre-wrap', fontSize: '1.1rem' }}>{order.otherItems}</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* ========================================================================================== */}
-                        {/* PAGE 2: BLANK (Safety Spacer) */}
-                        {/* ========================================================================================== */}
-                        <div className="print-page page-break" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: '#eee' }}>
-                            (This page intentionally left blank for duplex printing safety)
-                        </div>
-
-
-                        {/* ========================================================================================== */}
-                        {/* PAGE 3: MEAT & FROZEN (Part 2) - "Last Page" for Meat Guys */}
-                        {/* ========================================================================================== */}
-                        <div className="print-page page-break" style={{ padding: '2rem' }}>
-                            {/* Header */}
-                            <div style={{ borderBottom: '2px solid black', paddingBottom: '1rem', marginBottom: '2rem' }}>
-                                <div style={{ fontSize: '3rem', fontWeight: 'bold' }}>
-                                    {order.userName}
-                                </div>
-                                <div style={{ fontSize: '2rem', marginTop: '0.5rem' }}>
-                                    {order.userPhone || "No Phone"}
-                                </div>
-                                <div style={{ marginTop: '1rem', fontSize: '1.2rem' }}>
-                                    <strong>Pickup Date:</strong> {pickupDate}
-                                </div>
-                                <div style={{ marginTop: '0.5rem', fontSize: '1.2rem', color: 'blue' }}>
-                                    <strong>PART 2: MEAT & FROZEN</strong>
-                                </div>
-                            </div>
-
-                            {/* Verification/Internal Use Box */}
-                            <div style={{ border: '1px solid #ccc', padding: '1rem', marginBottom: '2rem', backgroundColor: '#e6f7ff', display: 'flex', justifyContent: 'space-between' }}>
-                                <div>
-                                    <strong>Part 2: Fresh, Refrigerated & Frozen</strong>
-                                </div>
-                                <div style={{ display: 'flex', gap: '2rem' }}>
-                                    <span>[ ] Packed</span>
-                                    <span>[ ] Loaded</span>
-                                </div>
-                            </div>
-
-                            {/* Meat/Fresh List */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
-                                {freshGroups && Object.keys(freshGroups).map(section => (
-                                    <div key={section} style={{ marginBottom: '1.5rem', breakInside: 'avoid' }}>
-                                        <h3 style={{ textTransform: 'uppercase', borderBottom: '1px solid #eee', marginBottom: '0.5rem', fontSize: '0.9rem', color: '#444' }}>
-                                            {t(`request.sections.${section}`)}
-                                        </h3>
-                                        <ul style={{ listStyle: 'none', padding: 0 }}>
-                                            {freshGroups[section].map(key => (
-                                                <li key={key} style={{ padding: '0.5rem 0', borderBottom: '1px dashed #eee', fontSize: '1.4rem', fontWeight: '500' }}> {/* Larger font for warehouse visibility */}
-                                                    <span style={{ display: 'inline-block', width: '24px', height: '24px', border: '2px solid #333', marginRight: '15px', verticalAlign: 'middle' }}></span>
-                                                    {getTranslatedItemName(key)}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                ))}
-                                {!freshGroups && <p className="text-muted">No fresh items requested.</p>}
-                            </div>
-                        </div>
-
-                        {/* ========================================================================================== */}
-                        {/* PAGE 4: BLANK SPACER (To ensure next order starts on fresh sheet) */}
-                        {/* ========================================================================================== */}
-                        <div className="print-page page-break" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: '#eee' }}>
-                            (End of Order Spacer)
-                        </div>
-
-                    </div>
-                );
-            })}
-        </div>
-    );
+export default function PrintLayout({
+  orders,
+  t,
+  language,
+}: {
+  orders: Order[];
+  t: (key: string) => string;
+  language: string;
+}) {
+  const source = useRef<HTMLDivElement>(null),
+    output = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!source.current || !output.current) return;
+    const target = output.current;
+    target.replaceChildren();
+    for (const part of Array.from(source.current.children)) {
+      const header = part.firstElementChild!;
+      let page: HTMLElement;
+      let count = 0;
+      const create = () => {
+        const next = document.createElement("section");
+        next.className = "packing-page";
+        next.append(header.cloneNode(true));
+        target.append(next);
+        count++;
+        return next;
+      };
+      page = create();
+      for (const block of Array.from(part.children).slice(1)) {
+        const clone = block.cloneNode(true);
+        page.append(clone);
+        if (page.scrollHeight > page.clientHeight) {
+          page.removeChild(clone);
+          page = create();
+          page.append(clone);
+        }
+      }
+      // Each part consumes complete sheets, based on measured page count rather than a fixed spacer assumption.
+      if (count % 2) {
+        const blank = document.createElement("section");
+        blank.className = "packing-page packing-blank";
+        blank.textContent = "\u00a0";
+        target.append(blank);
+      }
+    }
+    return () => target.replaceChildren();
+  }, [orders, t, language]);
+  return (
+    <div id="print-container">
+      <div className="packing-source" ref={source} aria-hidden="true">
+        {orders.flatMap((order) =>
+          [false, true].map((fresh) => {
+            const items = fresh
+              ? (order.freshGoodsItems ??
+                order.selectedItems?.filter((k) => freshKeys.has(k)) ??
+                [])
+              : (order.dryGoodsItems ??
+                order.selectedItems?.filter((k) => !freshKeys.has(k)) ??
+                []);
+            const diet = order.dietaryRestrictions,
+              baby = order.babyNeeds;
+            const dietText =
+              !diet || diet.hasRestrictions === null
+                ? t("fix.notRecorded")
+                : !diet.hasRestrictions
+                  ? t("fix.none")
+                  : `${t("fix.glutenFree")}: ${diet.glutenFreeCount}; ${t("fix.vegan")}: ${diet.veganCount}`;
+            const babyText =
+              !baby || baby.hasBaby === null
+                ? t("fix.notRecorded")
+                : !baby.hasBaby
+                  ? t("fix.none")
+                  : [
+                      baby.needs?.diapers
+                        ? `${t("fix.diapers")}: ${baby.details?.diaperSize || t("fix.notRecorded")}`
+                        : "",
+                      baby.needs?.formula
+                        ? `${t("fix.formula")}: ${baby.details?.formulaType || t("fix.notRecorded")}`
+                        : "",
+                      baby.details?.other ?? "",
+                    ]
+                      .filter(Boolean)
+                      .join("; ");
+            return (
+              <article key={`${order.id}-${fresh}`}>
+                <header className="packing-header">
+                  <h1>{order.userName}</h1>
+                  <p>{order.userPhone || t("fix.notRecorded")}</p>
+                  <p>
+                    {t("fix.pickup")}:{" "}
+                    {formatPickupDate(order.pickupDate, language)} ·{" "}
+                    {t("fix.order")}: {order.id}
+                  </p>
+                  <h2>{t(fresh ? "fix.fresh" : "fix.dry")}</h2>
+                  <strong>
+                    {t("fix.dietary")}: {dietText}
+                  </strong>
+                </header>
+                {order.familySize && (
+                  <p>
+                    {t("fix.household")}: {t("fix.adults")}{" "}
+                    {order.familySize.adults}; {t("fix.children")}{" "}
+                    {order.familySize.children}; {t("fix.seniors")}{" "}
+                    {order.familySize.seniors}
+                  </p>
+                )}
+                {!fresh &&
+                  chunks(`${t("fix.baby")}: ${babyText}`).map((text, i) => (
+                    <p className="packing-notes" key={`baby-${i}`}>
+                      {text}
+                    </p>
+                  ))}
+                {Object.entries(checklistConfig).flatMap(([section, keys]) => {
+                  const selected = items.filter((k) => keys.includes(k));
+                  if (!selected.length) return [];
+                  return [
+                    <h3 key={`section-${section}`}>
+                      {t(`request.sections.${section}`)}
+                    </h3>,
+                    ...selected.map((k) => (
+                      <p className="packing-item" key={`item-${k}`}>
+                        □ {t(`request.items.${k}`)}
+                      </p>
+                    )),
+                  ];
+                })}
+                {!items.length && <p>{t("fix.empty")}</p>}
+                {!fresh &&
+                  chunks(order.otherItems || order.items || "").map(
+                    (text, i) => (
+                      <p className="packing-notes" key={`note-${i}`}>
+                        {i === 0 ? `${t("fix.notes")}: ` : ""}
+                        {text}
+                      </p>
+                    ),
+                  )}
+                <p>
+                  □ {t("fix.packed")}　□ {t("fix.pickedUp")}
+                </p>
+              </article>
+            );
+          }),
+        )}
+      </div>
+      <div className="packing-pages" ref={output} />
+    </div>
+  );
 }

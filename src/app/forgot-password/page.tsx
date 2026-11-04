@@ -7,61 +7,93 @@ import Link from "next/link";
 import { useLanguage } from "@/context/LanguageContext";
 
 export default function ForgotPasswordPage() {
-    const [email, setEmail] = useState("");
-    const [message, setMessage] = useState("");
-    const [error, setError] = useState("");
-    const [submitting, setSubmitting] = useState(false);
-    const { t } = useLanguage();
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const { t } = useLanguage();
 
-    const handleReset = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setMessage("");
-        setError("");
-        setSubmitting(true);
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMessage("");
+    setError("");
+    setSubmitting(true);
 
-        try {
-            await sendPasswordResetEmail(auth, email);
-            setMessage(t("forgotPassword.success"));
-        } catch (err: any) {
-            console.error(err);
-            if (err.code === 'auth/user-not-found') {
-                setError("No account found with this email.");
-            } else {
-                setError("Failed to send reset email. Please try again.");
-            }
-        }
-        setSubmitting(false);
-    };
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setMessage(t("forgotPassword.success"));
+    } catch (err: unknown) {
+      console.error(err);
+      if (
+        typeof err === "object" &&
+        err &&
+        "code" in err &&
+        err.code === "auth/user-not-found"
+      ) {
+        setError(t("fix.resetFailed"));
+      } else {
+        setError(t("fix.resetFailed"));
+      }
+    }
+    setSubmitting(false);
+  };
 
-    return (
-        <div className="flex justify-center items-center" style={{ minHeight: "60vh" }}>
-            <div className="card" style={{ width: "100%", maxWidth: "400px" }}>
-                <h1 className="text-xl text-center mb-md">{t("forgotPassword.title")}</h1>
+  return (
+    <div
+      className="flex justify-center items-center"
+      style={{ minHeight: "60vh" }}
+    >
+      <div className="card" style={{ width: "100%", maxWidth: "400px" }}>
+        <h1 className="text-xl text-center mb-md">
+          {t("forgotPassword.title")}
+        </h1>
 
-                {message && <div className="text-center mb-md" style={{ color: "var(--color-success)" }}>{message}</div>}
-                {error && <div className="text-center mb-md" style={{ color: "var(--color-error)" }}>{error}</div>}
+        {message && (
+          <div
+            className="text-center mb-md"
+            style={{ color: "var(--color-success)" }}
+          >
+            {message}
+          </div>
+        )}
+        {error && (
+          <div
+            className="text-center mb-md"
+            style={{ color: "var(--color-error)" }}
+          >
+            {error}
+          </div>
+        )}
 
-                <form onSubmit={handleReset} className="flex flex-col gap-md">
-                    <div>
-                        <label className="label">{t("common.email")}</label>
-                        <input
-                            type="email"
-                            className="input"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                            placeholder={t("forgotPassword.instruction")}
-                        />
-                    </div>
-                    <button type="submit" className="btn btn-primary" disabled={submitting}>
-                        {submitting ? t("forgotPassword.sending") : t("forgotPassword.sendLink")}
-                    </button>
-                </form>
+        <form onSubmit={handleReset} className="flex flex-col gap-md">
+          <div>
+            <label className="label">{t("common.email")}</label>
+            <input
+              type="email"
+              className="input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder={t("forgotPassword.instruction")}
+            />
+          </div>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={submitting}
+          >
+            {submitting
+              ? t("forgotPassword.sending")
+              : t("forgotPassword.sendLink")}
+          </button>
+        </form>
 
-                <div className="text-center mt-md text-sm">
-                    <Link href="/login" style={{ color: "var(--color-primary)" }}>{t("common.login")}</Link>
-                </div>
-            </div>
+        <div className="text-center mt-md text-sm">
+          <Link href="/login" style={{ color: "var(--color-primary)" }}>
+            {t("common.login")}
+          </Link>
         </div>
-    );
+      </div>
+    </div>
+  );
 }

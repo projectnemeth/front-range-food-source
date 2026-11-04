@@ -3,35 +3,50 @@
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 
 export default function HomePage() {
-  const { user, loading } = useAuth();
+  const { user, profile, loading, profileError, refreshProfile } = useAuth();
   const { t } = useLanguage();
-  const router = useRouter();
 
-  if (loading) return <div className="text-center mt-md">{t("common.loading")}</div>;
+  if (loading)
+    return <div className="text-center mt-md">{t("common.loading")}</div>;
 
+  if (profileError)
+    return (
+      <div>
+        {t("fix.profileError")}{" "}
+        <button onClick={() => void refreshProfile()}>{t("fix.retry")}</button>
+      </div>
+    );
+  if (user && !profile)
+    return <Link href="/register">{t("fix.complete")}</Link>;
   return (
     <div className="flex flex-col items-center gap-lg">
-      <h1 className="text-3xl font-bold text-center" style={{ color: "var(--color-primary)" }}>
+      <h1
+        className="text-3xl font-bold text-center"
+        style={{ color: "var(--color-primary)" }}
+      >
         Front Range Food Source
       </h1>
 
       <div className="card text-center" style={{ maxWidth: "600px" }}>
-        <p className="mb-md text-lg">
-          {t("home.welcome")}
-        </p>
+        <p className="mb-md text-lg">{t("home.welcome")}</p>
 
         {user ? (
           <div className="flex flex-col gap-md">
-            <p>Hello, <strong>{user.displayName || user.email}</strong>!</p>
+            <p>
+              Hello, <strong>{user.displayName || user.email}</strong>!
+            </p>
             <div className="flex gap-md justify-center">
               <Link href="/request" className="btn btn-primary">
                 {t("request.title")}
               </Link>
-              {/* We'll add Admin link here later if user is admin */}
+              {profile?.role === "ADMIN" && (
+                <Link href="/admin" className="btn btn-secondary">
+                  {t("home.adminLogin")}
+                </Link>
+              )}
             </div>
             <button
               onClick={() => auth.signOut()}

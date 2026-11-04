@@ -1,18 +1,13 @@
 import { NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
-
+import { publicOrdering } from "@/lib/server/batches";
+import { failure } from "@/lib/server/http";
+export const dynamic = "force-dynamic";
 export async function GET() {
-    try {
-        const docRef = adminDb.collection("settings").doc("global");
-        const docSnap = await docRef.get();
-
-        if (docSnap.exists) {
-            return NextResponse.json(docSnap.data());
-        }
-
-        return NextResponse.json({ isFormOpen: false }, { status: 404 });
-    } catch (error) {
-        console.error("Error fetching settings via API:", error);
-        return NextResponse.json({ error: "Failed to fetch settings" }, { status: 500 });
-    }
+  try {
+    return NextResponse.json(await publicOrdering(), {
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch (e) {
+    return failure(e);
+  }
 }
