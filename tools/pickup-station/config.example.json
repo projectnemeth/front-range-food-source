@@ -1,0 +1,21 @@
+{
+  "sheetId": "WORKING_SPREADSHEET_ID",
+  "formId": "EXISTING_GOOGLE_FORM_ID",
+  "staff": ["volunteer@example.org"],
+  "admins": ["coordinator@example.org"],
+  "stationName": "Food packing station",
+  "events": [
+    {
+      "id": "pickup-2026-11-14",
+      "label": "November 14 pickup",
+      "sourceValue": "November 14, 2026"
+    }
+  ],
+  "fields": {
+    "name": "FORM_ITEM_ID",
+    "phone": "FORM_ITEM_ID",
+    "householdSize": "FORM_ITEM_ID",
+    "event": "FORM_ITEM_ID"
+  },
+  "printer": { "id": 12345, "dpi": 203, "widthIn": 3, "heightIn": 2 }
+}

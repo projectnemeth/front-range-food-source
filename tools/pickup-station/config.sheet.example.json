@@ -1,0 +1,33 @@
+{
+  "sheetId": "SEPARATE_WORKING_SPREADSHEET_ID",
+  "staff": [],
+  "admins": ["coordinator@example.org"],
+  "stationName": "Food packing station",
+  "source": {
+    "type": "sheets",
+    "spreadsheetId": "SOURCE_RESPONSE_SPREADSHEET_ID",
+    "columns": {
+      "externalId": "ID#",
+      "submittedAt": "Date",
+      "name": "First & Last Name",
+      "phone": "Phone Number",
+      "householdSize": "Total in Family"
+    }
+  },
+  "events": [
+    {
+      "id": "pickup-2026-10-17",
+      "label": "October 17, 2026 \u2014 historical test only",
+      "sourceSheetId": 0,
+      "enabled": false
+    }
+  ],
+  "printer": {
+    "id": 12345,
+    "dpi": 203,
+    "widthIn": 3,
+    "heightIn": 2
+  },
+  "authMode": "devices",
+  "deviceSessionDays": 180
+}

@@ -1,0 +1,5 @@
+# Live settings and IDs stay local: this repository is public.
+config.json
+*.local.json
+# Rebuilt by `npm run package`.
+pickup-station-deployment.zip

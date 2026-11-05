@@ -1,0 +1,2855 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Pickup station · Front Range Food Source</title>
+    <style>
+      :root {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        color: #173e34;
+        background: #f5f6ef;
+        font-size: 17px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      header {
+        background: #173e34;
+        color: white;
+        padding: 22px max(22px, calc((100vw - 1160px) / 2));
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: center;
+      }
+      header strong {
+        font-size: 20px;
+      }
+      header small {
+        display: block;
+        color: #c5dac7;
+        margin-top: 5px;
+      }
+      .pill {
+        border-radius: 30px;
+        background: #e5edba;
+        color: #26452a;
+        padding: 8px 14px;
+        font-size: 14px;
+        white-space: nowrap;
+      }
+      main {
+        max-width: 1200px;
+        margin: auto;
+        padding: 28px 22px;
+      }
+      h1 {
+        font-size: 34px;
+        letter-spacing: -1px;
+        margin: 0 0 8px;
+      }
+      h2 {
+        font-size: 24px;
+        margin: 0 0 14px;
+      }
+      .muted {
+        color: #5b6f68;
+      }
+      .toolbar {
+        display: flex;
+        gap: 14px;
+        align-items: end;
+        flex-wrap: wrap;
+        margin: 24px 0 18px;
+      }
+      label {
+        display: block;
+        font-size: 14px;
+        font-weight: 650;
+        margin-bottom: 6px;
+      }
+      input,
+      select,
+      button,
+      textarea {
+        font: inherit;
+        border-radius: 10px;
+      }
+      input,
+      select,
+      textarea {
+        width: 100%;
+        border: 1px solid #a7b9ae;
+        background: white;
+        padding: 13px;
+        color: #173e34;
+        min-height: 50px;
+      }
+      button {
+        border: 1px solid #a7b9ae;
+        padding: 13px 18px;
+        background: white;
+        color: #173e34;
+        cursor: pointer;
+        min-height: 50px;
+        font-weight: 650;
+      }
+      button:hover {
+        background: #edf3e5;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: wait;
+      }
+      button.primary {
+        background: #22634e;
+        color: white;
+        border-color: #22634e;
+      }
+      button.primary:hover {
+        background: #174c3a;
+      }
+      .search {
+        flex: 1;
+        min-width: 240px;
+      }
+      .event {
+        min-width: 230px;
+      }
+      .stats {
+        display: flex;
+        gap: 25px;
+        border-top: 1px solid #d6dfd1;
+        padding: 18px 0;
+      }
+      .stats b {
+        font-size: 25px;
+        margin-right: 6px;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(300px, 1.1fr) minmax(320px, 1fr);
+        gap: 24px;
+      }
+      .panel {
+        border: 1px solid #d6dfd1;
+        background: white;
+        border-radius: 16px;
+        padding: 22px;
+      }
+      .list {
+        max-height: 65vh;
+        overflow: auto;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 15px 4px;
+        border-bottom: 1px solid #e4e9df;
+      }
+      .row:last-child {
+        border: 0;
+      }
+      .row input {
+        width: 22px;
+        min-height: 22px;
+        height: 22px;
+        flex: none;
+      }
+      .person {
+        border: 0;
+        text-align: left;
+        flex: 1;
+        padding: 8px;
+        background: transparent;
+      }
+      .person span {
+        display: block;
+        font-size: 14px;
+        font-weight: 400;
+        margin-top: 6px;
+      }
+      .row.selected {
+        background: #edf3e5;
+        border-radius: 10px;
+      }
+      .status {
+        display: inline-block;
+        font-size: 13px;
+        border-radius: 6px;
+        padding: 4px 7px;
+        background: #edf1e8;
+      }
+      .status.warn {
+        background: #fff0d0;
+        color: #704915;
+      }
+      .label {
+        background: white;
+        border: 2px dashed #a6b5aa;
+        border-radius: 8px;
+        padding: 22px;
+        margin: 20px 0;
+        color: #17271f;
+      }
+      .label b {
+        display: block;
+        font-size: 27px;
+        overflow-wrap: anywhere;
+        margin-bottom: 12px;
+      }
+      .label p {
+        margin: 7px 0;
+      }
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      .actions button {
+        flex: 1;
+      }
+      .notice {
+        padding: 14px 17px;
+        border-radius: 10px;
+        background: #e7eddd;
+        margin-bottom: 18px;
+        line-height: 1.5;
+      }
+      .notice.error {
+        background: #ffebdb;
+        color: #713d15;
+      }
+      .demo {
+        background: #fff0d0;
+        color: #674711;
+        padding: 12px 22px;
+        text-align: center;
+      }
+      .job {
+        border-top: 1px solid #d6dfd1;
+        margin-top: 18px;
+        padding-top: 15px;
+        font-size: 14px;
+      }
+      .job button {
+        font-size: 14px;
+        margin-top: 10px;
+      }
+      #feedback:empty {
+        display: none;
+      }
+      .topline {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+      #selectionInfo {
+        font-size: 14px;
+      }
+      .small {
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      .empty {
+        padding: 35px 8px;
+        color: #5b6f68;
+        text-align: center;
+      }
+      details {
+        margin-top: 20px;
+      }
+      summary {
+        cursor: pointer;
+        min-height: 44px;
+        padding-top: 10px;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible {
+        outline: 3px solid #c78e32;
+        outline-offset: 2px;
+      }
+      @media (max-width: 740px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        .list {
+          max-height: 380px;
+        }
+        h1 {
+          font-size: 28px;
+        }
+        .toolbar > * {
+          flex: 1;
+          min-width: 150px;
+        }
+        header {
+          padding: 18px;
+        }
+        header .pill {
+          display: none;
+        }
+        .stats {
+          gap: 15px;
+          font-size: 14px;
+        }
+        .stats b {
+          font-size: 22px;
+        }
+        main {
+          padding: 22px 16px;
+        }
+        .panel {
+          padding: 18px;
+        }
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .views {
+        display: flex;
+        gap: 10px;
+        margin-top: 22px;
+      }
+      .views button[aria-pressed="true"] {
+        background: #173e34;
+        color: white;
+      }
+      .queue {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+        gap: 16px;
+      }
+      .ticket {
+        border: 1px solid #c5d4c9;
+        border-top: 5px solid #22634e;
+        border-radius: 12px;
+        padding: 20px;
+        background: white;
+      }
+      .ticket.warn {
+        border-top-color: #b77716;
+      }
+      .ticket h3 {
+        margin: 12px 0;
+        font-size: 23px;
+      }
+      .ticket p {
+        line-height: 1.5;
+      }
+      .ticket button {
+        width: 100%;
+        margin-top: 10px;
+      }
+      .counter {
+        font-weight: 700;
+      }
+      .filters {
+        max-width: 230px;
+        margin-bottom: 15px;
+      }
+      .demoControls {
+        max-width: 420px;
+        margin: 12px auto 0;
+        text-align: left;
+      }
+      .freshness {
+        margin-top: 8px;
+        min-height: 24px;
+      }
+      .freshness.stale {
+        color: #9b451c;
+        font-weight: 650;
+      }
+      .lineToggle {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        margin-top: 16px;
+      }
+      .lineToggle[hidden] {
+        display: none;
+      }
+      .lineHint {
+        flex-basis: 100%;
+        margin: 0;
+      }
+      .warnText {
+        color: #9b451c;
+        font-weight: 650;
+      }
+      button.line {
+        flex: 1;
+        min-width: 130px;
+        font-size: 19px;
+      }
+      button.line.blue {
+        border: 2px solid #1f5fbf;
+        color: #1f5fbf;
+      }
+      button.line.orange {
+        border: 2px solid #d9661a;
+        color: #b04f0d;
+      }
+      button.line.blue[aria-pressed="true"] {
+        background: #1f5fbf;
+        color: white;
+      }
+      button.line.orange[aria-pressed="true"] {
+        background: #d9661a;
+        color: white;
+      }
+      button.primary.line-blue {
+        background: #1f5fbf;
+        border-color: #1f5fbf;
+      }
+      button.primary.line-orange {
+        background: #d9661a;
+        border-color: #d9661a;
+      }
+      .fieldLabel {
+        font-weight: 650;
+        font-size: 15px;
+        margin: 14px 0 6px;
+      }
+      .numberDisplay {
+        font-size: 34px;
+        font-weight: 750;
+        letter-spacing: 6px;
+        text-align: center;
+        border: 2px solid #a7b9ae;
+        border-radius: 10px;
+        padding: 6px;
+        background: white;
+        font-variant-numeric: tabular-nums;
+      }
+      .numberDisplay.complete {
+        border-color: #22634e;
+        background: #edf3e5;
+      }
+      .keypad {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .keypad button {
+        font-size: 24px;
+        min-height: 54px;
+        padding: 6px;
+      }
+      .keypad button.small {
+        font-size: 16px;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .chips button {
+        min-height: 38px;
+        padding: 6px 12px;
+        font-size: 15px;
+        border-radius: 20px;
+        font-weight: 600;
+      }
+      .arrivalEditor {
+        margin-bottom: 14px;
+      }
+      .arrivalEditor label {
+        display: block;
+        margin-top: 14px;
+      }
+      .lineChoice {
+        display: flex;
+        gap: 8px;
+      }
+      .labelHead {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .labelNumber {
+        font-size: 30px;
+        font-weight: 800;
+      }
+      .labelLine {
+        border: 3px solid #17271f;
+        padding: 4px 12px;
+        font-weight: 800;
+        font-size: 20px;
+      }
+      .labelLine.orange {
+        background: #17271f;
+        color: white;
+      }
+      .ticket.line-blue {
+        border-left: 8px solid #1f5fbf;
+      }
+      .ticket.line-orange {
+        border-left: 8px solid #d9661a;
+      }
+      .arrivalLine {
+        font-weight: 750;
+        font-size: 19px;
+        margin: 6px 0;
+      }
+      .buildInfo {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 22px 28px;
+      }
+      .actions button.secondary {
+        flex: 0 0 auto;
+      }
+      .walkInButton {
+        border: 2px dashed #22634e;
+      }
+      .labelBar {
+        background: #17271f;
+        color: white;
+        font-weight: 800;
+        text-align: center;
+        letter-spacing: 1px;
+        padding: 4px 8px;
+        margin: 2px 0 10px;
+      }
+      .stepper {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .stepper button {
+        min-width: 64px;
+        font-size: 26px;
+      }
+      .stepper .value {
+        font-size: 30px;
+        font-weight: 750;
+        min-width: 56px;
+        text-align: center;
+      }
+      .printAlerts {
+        position: sticky;
+        top: 8px;
+        z-index: 20;
+        display: grid;
+        gap: 10px;
+        margin: 0 0 16px;
+      }
+      .printAlerts[hidden] {
+        display: none;
+      }
+      .printAlert {
+        background: #fde8e1;
+        border: 2px solid #b4341c;
+        color: #6e1d0e;
+        border-radius: 14px;
+        padding: 14px 16px;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+      }
+      .printAlert strong {
+        display: block;
+        font-size: 19px;
+      }
+      .printAlert p {
+        margin: 6px 0 10px;
+      }
+      .printAlert button {
+        margin: 0 8px 0 0;
+      }
+    </style>
+  </head>
+  <body data-coordinator="false">
+    <div id="demo" class="demo" hidden>
+      DEMO · Fictional registrations. No printer connected. Changes reset on
+      reload.
+      <div class="demoControls">
+        <label for="demoOutcome">Rehearse the next print result</label
+        ><select id="demoOutcome">
+          <option value="Submitted">Normal submission</option>
+          <option value="Failed">Printer service rejects request</option>
+          <option value="Outcome unknown">
+            Connection times out — outcome unknown
+          </option>
+          <option value="offline">
+            Accepted, but the print computer is offline
+          </option>
+        </select>
+      </div>
+    </div>
+    <header>
+      <div>
+        <strong>Front Range Food Source</strong><small>Pickup station</small>
+      </div>
+      <span class="pill" id="station">Connecting…</span>
+    </header>
+    <section
+      id="deviceGate"
+      class="panel"
+      hidden
+      style="max-width: 560px; margin: 32px auto"
+    >
+      <h1>Set up this church iPad</h1>
+      <p>
+        A coordinator supplies a 4-digit setup PIN. After setup, volunteers can
+        check in households without signing in.
+      </p>
+      <label for="deviceCode">Setup PIN</label
+      ><input
+        id="deviceCode"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        maxlength="4"
+        autocomplete="one-time-code"
+        spellcheck="false"
+        placeholder="4-digit PIN"
+        style="font-size: 30px; letter-spacing: 10px; max-width: 220px"
+      />
+      <button id="enroll" class="primary" style="margin-top: 14px">
+        Authorize this iPad
+      </button>
+      <p id="deviceMessage" role="status" aria-live="polite"></p>
+      <p class="small muted">
+        This authorizes check-in and printing only. Coordinator controls remain
+        separate.
+      </p>
+    </section>
+    <main id="staffApp" hidden>
+      <div
+        id="printAlerts"
+        class="printAlerts"
+        role="alert"
+        aria-live="assertive"
+        hidden
+      ></div>
+      <h1>Welcome them. Get packing.</h1>
+      <div class="muted">
+        Find a household, confirm their details, and send labels to the packing
+        team.
+      </div>
+      <nav class="views" aria-label="Work area">
+        <button id="checkinView" aria-pressed="true">Car-line check-in</button
+        ><button id="packingView" aria-pressed="false">Packing station</button>
+      </nav>
+      <div
+        id="lineToggle"
+        class="lineToggle"
+        role="group"
+        aria-label="Car line for this iPad"
+      >
+        <button id="lineBlue" class="line blue" aria-pressed="false">
+          Blue line</button
+        ><button id="lineOrange" class="line orange" aria-pressed="false">
+          Orange line
+        </button>
+        <p id="lineHint" class="small lineHint"></p>
+      </div>
+      <div class="toolbar">
+        <div class="event">
+          <label for="event">Pickup event</label
+          ><select id="event"></select>
+        </div>
+        <div class="search">
+          <label for="search">Find a household</label
+          ><input
+            id="search"
+            type="search"
+            placeholder="Name or phone number"
+            autocomplete="off"
+          />
+        </div>
+        <button id="refresh">Refresh list</button>
+        <button id="addWalkIn" class="walkInButton">+ Pre-Packed walk-up</button>
+      </div>
+      <div class="small muted" id="syncTime"></div>
+      <div class="small muted freshness" id="freshness" role="status"></div>
+      <div class="stats">
+        <div><b id="total">0</b>households</div>
+        <div><b id="arrived">0</b>arrived</div>
+        <div><b id="remaining">0</b>expected</div>
+      </div>
+      <div id="feedback" role="status" aria-live="polite"></div>
+      <div class="layout" id="checkinPanel">
+        <section class="panel">
+          <div class="topline">
+            <h2>Pickup list</h2>
+            <span id="selectionInfo">0 selected</span>
+          </div>
+          <div class="filters">
+            <label for="filter">Show households</label
+            ><select id="filter">
+              <option value="all">All households</option>
+              <option value="expected">Expected</option>
+              <option value="arrived">Arrived</option>
+              <option value="attention">Needs attention</option>
+            </select>
+          </div>
+          <div id="list" class="list"></div>
+          <details>
+            <summary>Print ahead of pickup</summary>
+            <p class="small muted">
+              Select households using the checkboxes. This prepares labels
+              without marking anyone arrived. Previously prepared registrations
+              are skipped.
+            </p>
+            <label for="batchCopies">Labels per household</label
+            ><select id="batchCopies">
+              <option>1</option>
+              <option>2</option>
+              <option selected>3</option>
+            </select>
+            <div class="actions">
+              <button id="selectAll">Select visible</button
+              ><button id="batch" class="primary">Print selected</button>
+            </div>
+          </details>
+          <details id="adminTools" hidden>
+            <summary>Coordinator tools</summary>
+            <p class="small muted">
+              Refresh from the configured source before pickup and after edits.
+              Needs-review records must be corrected at the source, then
+              refreshed.
+            </p>
+            <div class="actions">
+              <button id="sync">Refresh source data</button
+              ><button id="setup">Check setup</button>
+            </div>
+            <div id="setupResult" aria-live="polite"></div>
+            <details>
+              <summary>Church iPad access</summary>
+              <p class="small">
+                Authorize each church iPad once. Keep these codes private. Codes
+                expire after 15 minutes and work once.
+              </p>
+              <label for="newDeviceLabel">Device name</label
+              ><input
+                id="newDeviceLabel"
+                placeholder="Car-line iPad 1"
+                maxlength="80"
+              />
+              <div class="actions">
+                <button id="createDeviceCode">Create setup PIN</button
+                ><button id="loadDevices">View authorized iPads</button>
+              </div>
+              <p id="enrollmentCode" role="status"></p>
+              <div id="deviceList"></div>
+            </details>
+          </details>
+        </section>
+        <section class="panel" id="detail">
+          <div class="empty">Select a household to check in.</div>
+        </section>
+      </div>
+      <section id="packingPanel" hidden>
+        <div class="topline">
+          <h2>Arrivals at the packing station</h2>
+          <span class="counter" id="packingCount"></span>
+        </div>
+        <p class="muted small">
+          Oldest arrivals first. This view refreshes every 30 seconds while idle
+          and visible. It does not mark a box packed or food collected.
+        </p>
+        <div class="queue" id="queue"></div>
+      </section>
+      <p class="small muted">
+        Check-in sends labels straight to the printer at the packing station.
+        If the app warns that a label may not have printed, ask the packing
+        team before reprinting.
+      </p>
+    </main>
+    <p id="buildInfo" class="small muted buildInfo" role="status"></p>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const demo = !(window.google && google.script && google.script.run);
+      let records = [],
+        current = null,
+        selected = new Set(),
+        busy = false,
+        settings = null,
+        view = "checkin",
+        lastReadAt = null,
+        detailId = null;
+      const tokens = new Map();
+      let setupSnapshot = null;
+      let authMode = "google",
+        deviceToken = null,
+        demoPaired = false;
+      const coordinatorMode =
+        document.body?.getAttribute("data-coordinator") === "true";
+      const deviceStorageKey = "frfs_device_access_v1";
+      // Must match getBuild() in Code.gs. package.py refuses to build if they differ.
+      const clientBuild = "2026-11-05.6";
+      // Each iPad remembers its own car line; volunteers switch it only when they change lines.
+      const lineStorageKey = "frfs_car_line_v1";
+      const arrivalDrafts = new Map();
+      // Walk-up (not pre-registered) household being added as a Pre-Packed Pickup.
+      const WALKIN = "__walkin__";
+      let walkInDraft = null;
+      const vehicleColors = [
+        "White",
+        "Black",
+        "Grey",
+        "Silver",
+        "Blue",
+        "Red",
+        "Tan",
+        "Green",
+      ];
+      const vehicleTypes = ["Car", "SUV", "Truck", "Van"];
+      let carLine = null;
+      try {
+        const savedLine = localStorage.getItem(lineStorageKey);
+        if (["blue", "orange"].includes(savedLine)) carLine = savedLine;
+      } catch (_) {}
+      let readSeq = 0;
+      const demoEvent = { id: "demo-event", label: "Sample pickup event" };
+      const demoRecords = [
+        ["Maria Garcia", "(303) 555-0142", 5],
+        ["James Thompson", "(720) 555-0118", 3],
+        ["Amina Hassan", "(303) 555-0163", 6],
+        ["David Martinez", "(720) 555-0194", 2],
+        ["Elena Rodríguez", "(303) 555-0127", 4],
+        ["Maria Garcia", "(720) 555-0185", 2],
+      ].map((x, i) => ({
+        id: "demo-" + i,
+        eventId: "demo-event",
+        name: x[0],
+        phone: x[1],
+        phoneSearch: x[1].replace(/\D/g, ""),
+        householdSize: x[2],
+        revision: 1,
+        errors: [],
+        jobs: [],
+        lastJob: null,
+      }));
+      // Fictional repeated-ID example; never derived from the live response sheet.
+      Object.assign(demoRecords[5], {
+        externalId: "DEMO-106",
+        reviewRequired: true,
+        groupKey: "demo-group",
+        errors: ["Repeated ID# needs coordinator review."],
+        duplicateCandidates: [
+          {
+            key: "demo-candidate-1",
+            name: "Maria Garcia",
+            phone: "(720) 555-0185",
+            phoneSearch: "7205550185",
+            householdSize: 2,
+            submittedAt: "Sample submission 1",
+            sourceRow: 7,
+            errors: [],
+          },
+          {
+            key: "demo-candidate-2",
+            name: "Maria Garcia",
+            phone: "(720) 555-0185",
+            phoneSearch: "7205550185",
+            householdSize: 3,
+            submittedAt: "Sample submission 2",
+            sourceRow: 8,
+            errors: [],
+          },
+        ],
+      });
+      function uid() {
+        return crypto.randomUUID
+          ? crypto.randomUUID()
+          : "request-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+      }
+      function el(tag, text, cls) {
+        const n = document.createElement(tag);
+        if (text !== undefined) n.textContent = text;
+        if (cls) n.className = cls;
+        return n;
+      }
+      function note(text, error = false) {
+        $("feedback").className = "notice" + (error ? " error" : "");
+        $("feedback").textContent = text;
+      }
+      function setBusy(value) {
+        busy = value;
+        document
+          .querySelectorAll("button,select,input[type=checkbox]")
+          .forEach((n) => (n.disabled = value));
+      }
+      function showDeviceGate(message) {
+        $("staffApp").hidden = true;
+        $("deviceGate").hidden = false;
+        $("deviceMessage").textContent = message || "";
+        records = [];
+        current = null;
+        selected.clear();
+        $("list").replaceChildren();
+        $("queue").replaceChildren();
+        $("detail").replaceChildren();
+        settings = null;
+      }
+      function storedDeviceToken() {
+        try {
+          return localStorage.getItem(deviceStorageKey);
+        } catch (_) {
+          return null;
+        }
+      }
+      function rememberDeviceToken(token) {
+        if (demo) return true;
+        try {
+          localStorage.setItem(deviceStorageKey, token);
+          return localStorage.getItem(deviceStorageKey) === token;
+        } catch (_) {
+          return false;
+        }
+      }
+      function forgetDeviceToken() {
+        deviceToken = null;
+        try {
+          localStorage.removeItem(deviceStorageKey);
+        } catch (_) {}
+      }
+      function demoStatus() {
+        const value = $("demoOutcome").value;
+        return value === "offline" ? "Submitted" : value || "Submitted";
+      }
+      function api(method, ...args) {
+        if (!demo)
+          return new Promise((resolve, reject) => {
+            const failure = (error) => {
+              if (String(error.message).includes("DEVICE_ACCESS_REQUIRED")) {
+                forgetDeviceToken();
+                showDeviceGate(
+                  "This iPad needs a new setup PIN from a coordinator. Its access may have expired or been revoked.",
+                );
+              }
+              reject(error);
+            };
+            const runner = google.script.run
+              .withSuccessHandler(resolve)
+              .withFailureHandler(failure);
+            if (
+              authMode === "devices" &&
+              !coordinatorMode &&
+              !["getBootstrap", "enrollDevice", "getBuild"].includes(method)
+            )
+              runner.staffCall(deviceToken, method, args);
+            else runner[method](...args);
+          });
+        return new Promise((resolve, reject) =>
+          setTimeout(() => {
+            try {
+              if (method === "getBootstrap")
+                return resolve({ authMode: "google" });
+              if (method === "getBuild") return resolve(clientBuild);
+              if (method === "enrollDevice") {
+                if (String(args[0]).replace(/\s/g, "") !== "1234")
+                  throw new Error("For this fictional demo, use PIN 1234.");
+                demoPaired = true;
+                return resolve({
+                  token: "b".repeat(64),
+                  label: "Demo car-line iPad",
+                  expiresAt: new Date(
+                    Date.now() + 180 * 86400000,
+                  ).toISOString(),
+                });
+              }
+              if (method === "createDeviceEnrollment")
+                return resolve({
+                  code: "1234",
+                  label: args[0].label,
+                  expiresAt: new Date(Date.now() + 900000).toISOString(),
+                });
+              if (method === "listDeviceAccess")
+                return resolve(
+                  demoPaired
+                    ? [
+                        {
+                          id: "demo-device",
+                          label: "Demo car-line iPad",
+                          createdAt: new Date().toISOString(),
+                          expiresAt: new Date(
+                            Date.now() + 180 * 86400000,
+                          ).toISOString(),
+                          revokedAt: null,
+                        },
+                      ]
+                    : [],
+                );
+              if (method === "revokeDevice") {
+                demoPaired = false;
+                return resolve({
+                  id: "demo-device",
+                  revokedAt: new Date().toISOString(),
+                });
+              }
+              if (method === "getStation")
+                return resolve({
+                  actor: "demo@example.test",
+                  admin: !demoPaired,
+                  deviceLabel: demoPaired ? "Demo car-line iPad" : null,
+                  configured: true,
+                  station: "Packing station · demo",
+                  events: [demoEvent],
+                  lastSync: new Date().toISOString(),
+                });
+              if (method === "getSetupChecklist")
+                return resolve({
+                  configVersion: "demo-version",
+                  checks: [
+                    {
+                      key: "storage",
+                      label: "Working spreadsheet",
+                      ok: true,
+                      detail: "Fictional demo storage.",
+                    },
+                    {
+                      key: "source",
+                      label: "Response sheet",
+                      ok: true,
+                      detail: "Fictional source tab.",
+                    },
+                    {
+                      key: "event",
+                      label: "Pickup event",
+                      ok: true,
+                      detail: demoEvent.label,
+                    },
+                    {
+                      key: "printer",
+                      label: "Print configuration",
+                      ok: false,
+                      detail: "Demo only. No printer connection is made.",
+                    },
+                  ],
+                  tabs: [{ sheetId: 101, title: "Sample pickup tab" }],
+                  events: [{ ...demoEvent, sourceSheetId: 101, enabled: true }],
+                });
+              if (method === "configurePickupEvent") {
+                demoEvent.label = args[0].label;
+                return resolve({
+                  eventId: demoEvent.id,
+                  message:
+                    "Demo event label saved. Nothing was imported or printed.",
+                });
+              }
+              if (method === "previewSheetImport")
+                return resolve([
+                  {
+                    eventLabel: demoEvent.label,
+                    tabTitle: "Sample pickup tab",
+                    sourceRows: 7,
+                    lastListRow: 8,
+                    ignoredAfterList: 1,
+                    households: 6,
+                    duplicateGroups: 1,
+                  },
+                ]);
+              if (method === "setupStation")
+                return resolve("Demo storage already initialized.");
+              if (method === "checkPrintStatus") {
+                const r = demoRecords.find((x) =>
+                  x.jobs.some((j) => j.id === args[0]),
+                );
+                const j = r.jobs.find((x) => x.id === args[0]);
+                j.providerState =
+                  $("demoOutcome").value === "Failed"
+                    ? "error"
+                    : ["Outcome unknown", "offline"].includes(
+                          $("demoOutcome").value,
+                        )
+                      ? "new"
+                      : "done";
+                j.providerCheckedAt = new Date().toISOString();
+                return resolve({
+                  job: j,
+                  message:
+                    "Demo service status updated.",
+                });
+              }
+              if (method === "listRegistrations")
+                return resolve(JSON.parse(JSON.stringify(demoRecords)));
+              if (method === "syncResponses")
+                return resolve({
+                  imported: 6,
+                  unassigned: 0,
+                  needsReview: demoRecords.filter((r) => r.errors.length)
+                    .length,
+                });
+              if (method === "resolveDuplicate") {
+                const q = args[0],
+                  r = demoRecords.find((x) => x.id === q.id);
+                if (q.revision !== r.revision || q.groupKey !== r.groupKey)
+                  throw new Error("Responses changed. Refresh first.");
+                if (!q.reason || q.reason.trim().length < 5)
+                  throw new Error("Explain the selection.");
+                const candidate = r.duplicateCandidates.find(
+                  (c) => c.key === q.candidateKey,
+                );
+                if (!candidate) throw new Error("Select a response.");
+                Object.assign(r, {
+                  name: candidate.name,
+                  phone: candidate.phone,
+                  phoneSearch: candidate.phoneSearch,
+                  householdSize: candidate.householdSize,
+                  reviewRequired: false,
+                  errors: [],
+                  revision: r.revision + 1,
+                  duplicateReview: {
+                    reason: q.reason,
+                    candidateKey: q.candidateKey,
+                  },
+                });
+                return resolve({
+                  message: "Response selected. Nothing was printed.",
+                });
+              }
+              if (method === "addWalkIn") {
+                const q = args[0];
+                let r = demoRecords.find((x) => x.walkInToken === q.token);
+                if (!r) {
+                  if (!String(q.name || "").trim())
+                    throw new Error("Name must contain 1–100 characters.");
+                  r = {
+                    id: "demo-walkin-" + demoRecords.length,
+                    eventId: demoEvent.id,
+                    name: q.name.trim(),
+                    phone: q.phone || "No phone",
+                    phoneSearch: String(q.phone || "").replace(/\D/g, ""),
+                    householdSize: q.householdSize,
+                    revision: 1,
+                    errors: [],
+                    jobs: [],
+                    lastJob: null,
+                    walkIn: true,
+                    pickupType: "prepacked",
+                    walkInToken: q.token,
+                  };
+                  demoRecords.push(r);
+                }
+                api("requestAction", {
+                  id: r.id,
+                  revision: 1,
+                  action: q.print === false ? "checkinOnly" : "checkin",
+                  copies: q.copies,
+                  token: q.token + "-arrive",
+                  arrival: q.arrival,
+                }).then((res) => resolve(Object.assign({ id: r.id }, res)), reject);
+                return;
+              }
+              if (method === "requestAction") {
+                const q = args[0],
+                  r = demoRecords.find((x) => x.id === q.id);
+                if (r.reviewRequired)
+                  throw new Error(
+                    "Coordinator review required before check-in or printing.",
+                  );
+                if (
+                  ["checkin", "checkinOnly"].includes(q.action) &&
+                  r.checkedInAt
+                )
+                  return resolve({
+                    reused: true,
+                    job: r.lastJob,
+                    arrival: r.arrival,
+                  });
+                if (
+                  q.action === "advance" &&
+                  r.jobs.some((j) => j.action === "advance")
+                )
+                  return resolve({ reused: true, job: r.lastJob });
+                if (q.action === "checkin" || q.action === "checkinOnly") {
+                  if (
+                    !q.arrival ||
+                    !/^\d{3}$/.test(q.arrival.number) ||
+                    !["blue", "orange"].includes(q.arrival.line)
+                  )
+                    throw new Error(
+                      "Choose this iPad’s car line and enter the 3-digit number before checking in.",
+                    );
+                  r.checkedInAt = new Date().toISOString();
+                  r.arrival = q.arrival;
+                }
+                if (q.action === "reprint" && q.arrival && r.checkedInAt)
+                  r.arrival = q.arrival;
+                if (q.action === "checkinOnly")
+                  return resolve({ job: null, arrival: r.arrival });
+                const j = {
+                  id: uid(),
+                  providerId:
+                    1001 + demoRecords.reduce((n, r) => n + r.jobs.length, 0),
+                  status: demoStatus(),
+                  action: q.action,
+                  revision: r.revision,
+                  copies: q.copies,
+                  createdAt: new Date().toISOString(),
+                  reason: q.reason,
+                  arrival:
+                    q.action === "advance"
+                      ? null
+                      : r.checkedInAt
+                        ? r.arrival
+                        : null,
+                };
+                r.jobs.unshift(j);
+                r.lastJob = j;
+                if (q.action === "checkin") r.arrivalJobId = j.id;
+                return resolve({ job: j, arrival: r.arrival || null });
+              }
+              if (method === "resumePrint") {
+                const r = demoRecords.find((x) =>
+                  x.jobs.some((j) => j.id === args[0]),
+                );
+                const j = r.jobs.find((j) => j.id === args[0]);
+                if (j.status === "Prepared")
+                  j.status = demoStatus();
+                return resolve(j);
+              }
+              if (method === "confirmPrinted") {
+                const r = demoRecords.find((x) =>
+                  x.jobs.some((j) => j.id === args[0]),
+                );
+                const j = r.jobs.find((j) => j.id === args[0]);
+                j.status = "Confirmed by staff";
+                return resolve(j);
+              }
+              reject(new Error("Unknown demo method"));
+            } catch (e) {
+              reject(e);
+            }
+          }, 200),
+        );
+      }
+      function fold(text) {
+        return String(text || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase();
+      }
+      function packingJob(r) {
+        return (
+          (r.jobs || []).find(
+            (j) =>
+              j.action === "checkin" ||
+              (j.action === "reprint" &&
+                r.checkedInAt &&
+                j.createdAt >= r.checkedInAt),
+          ) || null
+        );
+      }
+      // Automatic follow-up after labels are sent. With no packing screen, the volunteer's
+      // iPad is the only place a stalled print can surface. Status checks never resend.
+      const printWatchDelays = demo ? [3000, 8000] : [15000, 40000];
+      const stuckAfterMs = demo ? 5000 : 30000;
+      const printAlerts = new Map();
+      const watchedJobs = new Set();
+      function stuckWaiting(j) {
+        return !!(
+          j.providerState === "new" &&
+          j.providerCheckedAt &&
+          Date.parse(j.providerCheckedAt) - Date.parse(j.createdAt) >
+            stuckAfterMs
+        );
+      }
+      function watchPrint(job, name) {
+        if (!job || !job.id || watchedJobs.has(job.id)) return;
+        watchedJobs.add(job.id);
+        if (["Failed", "Outcome unknown"].includes(job.status)) {
+          raisePrintAlert(job.id, name, guidance(job));
+          return;
+        }
+        if (job.status !== "Submitted" || !job.providerId) return;
+        setTimeout(() => followUpPrint(job.id, name, 0), printWatchDelays[0]);
+      }
+      async function followUpPrint(jobId, name, attempt) {
+        const last = attempt >= printWatchDelays.length - 1;
+        const again = () =>
+          setTimeout(
+            () => followUpPrint(jobId, name, attempt + 1),
+            printWatchDelays[attempt + 1] - printWatchDelays[attempt],
+          );
+        let job;
+        try {
+          job = (await api("checkPrintStatus", jobId)).job;
+        } catch (_) {
+          if (last)
+            raisePrintAlert(
+              jobId,
+              name,
+              "Could not check whether these labels reached the print computer. Ask the packing team whether they printed before reprinting.",
+            );
+          else again();
+          return;
+        }
+        if (!job || job.status === "Confirmed by staff") return;
+        if (["error", "expired"].includes(job.providerState)) {
+          raisePrintAlert(jobId, name, serviceGuidance(job));
+          return;
+        }
+        if (["done", "sent_to_client"].includes(job.providerState)) return;
+        if (!last) return again();
+        raisePrintAlert(
+          jobId,
+          name,
+          "The print computer has not picked up these labels. Check that it is on, awake and online, then ask the packing team before reprinting.",
+        );
+      }
+      function raisePrintAlert(jobId, name, message) {
+        printAlerts.set(jobId, { name: name || "a household", message });
+        renderPrintAlerts();
+        quietRefresh();
+      }
+      function renderPrintAlerts() {
+        const box = $("printAlerts");
+        box.replaceChildren();
+        box.hidden = !printAlerts.size;
+        printAlerts.forEach((alert, jobId) => {
+          const card = el("div", undefined, "printAlert");
+          card.append(
+            el("strong", "Label problem: " + alert.name),
+            el("p", alert.message),
+          );
+          const review = el("button", "Review household");
+          review.onclick = () => {
+            const r = records.find((x) =>
+              (x.jobs || []).some((j) => j.id === jobId),
+            );
+            if (r) current = r.id;
+            switchView("checkin");
+            $("detail").scrollIntoView({ behavior: "smooth", block: "start" });
+          };
+          const dismiss = el("button", "Dismiss");
+          dismiss.onclick = () => {
+            printAlerts.delete(jobId);
+            renderPrintAlerts();
+          };
+          card.append(review, dismiss);
+          box.append(card);
+        });
+      }
+      function needsAttention(r) {
+        const j = r.checkedInAt ? packingJob(r) : r.lastJob;
+        return !!(
+          r.errors.length ||
+          (r.checkedInAt && !j) ||
+          (j &&
+            (["Failed", "Outcome unknown", "Prepared"].includes(j.status) ||
+              (j.status !== "Confirmed by staff" &&
+                (["error", "expired"].includes(j.providerState) ||
+                  stuckWaiting(j))) ||
+              j.revision !== r.revision))
+        );
+      }
+      function guidance(job) {
+        if (!job)
+          return "No arrival label requested. Tell the packing team before preparing this box.";
+        if (job.status === "Failed")
+          return (
+            job.failureReason ||
+            "Request failed. Check the printing setup, then use an explicit reprint."
+          );
+        if (job.status === "Outcome unknown")
+          return "The label may have printed. Ask the packing team before reprinting.";
+        if (job.status === "Prepared")
+          return "Saved but not sent. Use Resume saved job; it will not create another job.";
+        if (job.status === "Sending")
+          return "Sending to the packing station. Do not reprint while this request is in progress.";
+        if (job.status === "Confirmed by staff")
+          return "A staff member confirmed seeing these labels. This is not a box-completed status.";
+        if (job.providerState) return serviceGuidance(job);
+        return "Labels sent to the printer at the packing station.";
+      }
+      function serviceGuidance(job) {
+        const messages = {
+          new: "Waiting for the print computer. Check that it is on, awake and online.",
+          sent_to_client: "Reached the print computer at the packing station.",
+          done: "Sent to the printer at the packing station.",
+          error:
+            "The print service reported a problem. Ask the packing team to check the printer, then reprint if needed.",
+          expired:
+            "The print computer did not pick this up in time. Check that it is on and online, then reprint with a reason.",
+          unknown:
+            "The print service returned an unrecognized state. Check the station before reprinting.",
+        };
+        return messages[job.providerState] || "No service status checked yet.";
+      }
+      function visible() {
+        const q = fold($("search").value.trim()),
+          digits = q.replace(/\D/g, ""),
+          filter = $("filter").value;
+        return records.filter(
+          (r) =>
+            (fold(r.name).includes(q) ||
+              (digits && r.phoneSearch.includes(digits))) &&
+            (view === "packing" ||
+              filter === "all" ||
+              (filter === "expected" && !r.checkedInAt) ||
+              (filter === "arrived" && r.checkedInAt) ||
+              (filter === "attention" && needsAttention(r))),
+        );
+      }
+      function switchView(next) {
+        view = next;
+        $("checkinPanel").hidden = view !== "checkin";
+        $("packingPanel").hidden = view !== "packing";
+        $("lineToggle").hidden = view !== "checkin";
+        $("checkinView").setAttribute(
+          "aria-pressed",
+          String(view === "checkin"),
+        );
+        $("packingView").setAttribute(
+          "aria-pressed",
+          String(view === "packing"),
+        );
+        render();
+      }
+      function renderQueue() {
+        const arrivals = visible()
+          .filter((r) => r.checkedInAt)
+          .sort((a, b) => a.checkedInAt.localeCompare(b.checkedInAt));
+        $("packingCount").textContent =
+          arrivals.length +
+          " arrived · " +
+          arrivals.filter(needsAttention).length +
+          " need attention";
+        $("queue").replaceChildren();
+        if (!arrivals.length) {
+          $("queue").append(
+            el(
+              "div",
+              "No matching arrivals yet. Advance printing does not add a household here.",
+              "empty",
+            ),
+          );
+          return;
+        }
+        arrivals.forEach((r) => {
+          const j = packingJob(r),
+            card = el(
+              "article",
+              undefined,
+              "ticket" +
+                (needsAttention(r) ? " warn" : "") +
+                (r.arrival ? " line-" + r.arrival.line : ""),
+            );
+          card.append(
+            el(
+              "span",
+              "Arrived " +
+                new Date(r.checkedInAt).toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                }),
+              "small muted",
+            ),
+            el("h3", r.name),
+            el(
+              "p",
+              arrivalText(r.arrival) + (r.walkIn ? " · PRE-PACKED" : ""),
+              "arrivalLine",
+            ),
+            el("div", r.phone + " · " + r.householdSize + " people"),
+            el("p", j ? j.status : "No arrival label", "status"),
+            el("p", guidance(j), "small"),
+          );
+          if (j && j.revision !== r.revision)
+            card.append(
+              el(
+                "p",
+                "Registration changed after this label was prepared. Review before packing.",
+                "notice error",
+              ),
+            );
+          if (j && j.status === "Prepared") {
+            const resume = el("button", "Resume saved job");
+            resume.onclick = () => resumeJob(j.id);
+            card.append(resume);
+          }
+          if (j?.providerId) {
+            if (j.providerState)
+              card.append(el("p", serviceGuidance(j), "small"));
+            const statusButton = el("button", "Check service status");
+            statusButton.onclick = () => checkJobStatus(j.id);
+            card.append(statusButton);
+          }
+          const review = el("button", "Review household");
+          review.onclick = () => {
+            current = r.id;
+            switchView("checkin");
+            $("detail").scrollIntoView({ behavior: "smooth", block: "start" });
+          };
+          card.append(review);
+          $("queue").append(card);
+        });
+      }
+      function renderBuild(serverBuild) {
+        const box = $("buildInfo");
+        if (serverBuild === clientBuild) {
+          box.className = "small muted buildInfo";
+          box.textContent = "Version " + clientBuild + " · screen and server match";
+          return;
+        }
+        box.className = "small buildInfo warnText";
+        box.textContent =
+          "Version mismatch: screen " +
+          clientBuild +
+          ", server " +
+          (serverBuild || "older than " + clientBuild) +
+          ". Copy Code.gs and Index.html into Apps Script again, save, then deploy a New version of both deployments.";
+      }
+      function lineName(line) {
+        return line === "orange" ? "Orange" : line === "blue" ? "Blue" : "";
+      }
+      function arrivalText(a) {
+        return a
+          ? "#" +
+              a.number +
+              " · " +
+              lineName(a.line) +
+              " line" +
+              (a.vehicle ? " · " + a.vehicle : "")
+          : "";
+      }
+      function setLine(line) {
+        carLine = line;
+        try {
+          localStorage.setItem(lineStorageKey, line);
+        } catch (_) {}
+        renderLineToggle();
+        renderDetail();
+      }
+      function renderLineToggle() {
+        $("lineBlue").setAttribute("aria-pressed", String(carLine === "blue"));
+        $("lineOrange").setAttribute(
+          "aria-pressed",
+          String(carLine === "orange"),
+        );
+        $("lineHint").textContent = carLine
+          ? "This iPad is checking in cars for the " +
+            lineName(carLine) +
+            " line."
+          : "Choose this iPad’s line before checking anyone in.";
+        $("lineHint").className =
+          "small lineHint" + (carLine ? " muted" : " warnText");
+      }
+      function draftFor(r) {
+        let d = arrivalDrafts.get(r.id);
+        // A household checked in elsewhere starts from its saved details.
+        if (!d || (r.checkedInAt && !d.line)) {
+          d = r.arrival
+            ? {
+                number: r.arrival.number,
+                vehicle: r.arrival.vehicle || "",
+                line: r.arrival.line,
+              }
+            : { number: "", vehicle: "", line: null };
+          arrivalDrafts.set(r.id, d);
+        }
+        return d;
+      }
+      function setVehiclePart(d, kind, value) {
+        const words = d.vehicle.trim().split(/\s+/).filter(Boolean),
+          find = (list) =>
+            words.find((w) =>
+              list.some((x) => x.toLowerCase() === w.toLowerCase()),
+            );
+        const color = kind === "color" ? value : find(vehicleColors),
+          type = kind === "type" ? value : find(vehicleTypes);
+        d.vehicle = [color, type].filter(Boolean).join(" ");
+      }
+      function previewArrival(r) {
+        if (r.checkedInAt && !arrivalDrafts.has(r.id)) return r.arrival;
+        const d = draftFor(r);
+        return {
+          number: d.number,
+          line: r.checkedInAt ? d.line : carLine,
+          vehicle: d.vehicle.trim(),
+        };
+      }
+      function fillPreview(box, r) {
+        box.replaceChildren();
+        const a = previewArrival(r);
+        if (a) {
+          const head = el("div", undefined, "labelHead");
+          head.append(
+            el("span", "#" + (a.number + "___").slice(0, 3), "labelNumber"),
+            el(
+              "span",
+              a.line ? lineName(a.line).toUpperCase() : "LINE?",
+              "labelLine " + (a.line || ""),
+            ),
+          );
+          box.append(head);
+        }
+        if (r.pickupType === "prepacked")
+          box.append(el("div", "PRE-PACKED PICKUP", "labelBar"));
+        box.append(el("b", r.name));
+        if (a && a.vehicle) box.append(el("p", a.vehicle));
+        box.append(
+          el("p", "Phone: " + r.phone),
+          el("p", "Household: " + r.householdSize + " people"),
+        );
+      }
+      function updatePreview(r) {
+        if ($("labelPreview")) fillPreview($("labelPreview"), r);
+      }
+      // On-screen number pad: no system keyboard opens for the car number.
+      function arrivalEditor(r, correcting) {
+        const d = draftFor(r),
+          section = el("section", undefined, "arrivalEditor");
+        if (correcting) {
+          const row = el("div", undefined, "lineChoice");
+          ["blue", "orange"].forEach((line) => {
+            const b = el("button", lineName(line) + " line", "line " + line);
+            b.setAttribute("aria-pressed", String(d.line === line));
+            b.onclick = () => {
+              d.line = line;
+              renderDetail();
+            };
+            row.append(b);
+          });
+          section.append(el("div", "Car line", "fieldLabel"), row);
+        }
+        section.append(el("div", "3-digit number", "fieldLabel"));
+        const display = el(
+          "div",
+          (d.number + "___").slice(0, 3).split("").join(" "),
+          "numberDisplay" + (d.number.length === 3 ? " complete" : ""),
+        );
+        display.id = "numberDisplay";
+        display.setAttribute(
+          "aria-label",
+          "Number entered: " + (d.number || "none"),
+        );
+        const pad = el("div", undefined, "keypad");
+        ["1", "2", "3", "4", "5", "6", "7", "8", "9", "Clear", "0", "⌫"].forEach(
+          (k) => {
+            const key = el("button", k, /\d/.test(k) ? "key" : "key small");
+            if (k === "⌫") key.setAttribute("aria-label", "Delete last digit");
+            key.onclick = () => {
+              if (k === "Clear") d.number = "";
+              else if (k === "⌫") d.number = d.number.slice(0, -1);
+              else if (d.number.length < 3) d.number += k;
+              renderDetail();
+            };
+            pad.append(key);
+          },
+        );
+        section.append(display, pad);
+        const vLabel = el("label", "Vehicle (optional)");
+        vLabel.htmlFor = "vehicle";
+        const vehicle = el("input");
+        vehicle.id = "vehicle";
+        vehicle.maxLength = 30;
+        vehicle.value = d.vehicle;
+        vehicle.placeholder = "Tap below or type: Tan van, Grey SUV…";
+        vehicle.setAttribute("autocomplete", "off");
+        vehicle.setAttribute("autocapitalize", "words");
+        vehicle.oninput = () => {
+          d.vehicle = vehicle.value;
+          updatePreview(r.id === WALKIN ? walkInRecord() : r);
+        };
+        const colors = el("div", undefined, "chips"),
+          types = el("div", undefined, "chips");
+        vehicleColors.forEach((c) => {
+          const b = el("button", c, "chip");
+          b.onclick = () => {
+            setVehiclePart(d, "color", c);
+            renderDetail();
+          };
+          colors.append(b);
+        });
+        vehicleTypes.forEach((t) => {
+          const b = el("button", t, "chip");
+          b.onclick = () => {
+            setVehiclePart(d, "type", t);
+            renderDetail();
+          };
+          types.append(b);
+        });
+        section.append(vLabel, vehicle, colors, types);
+        return section;
+      }
+      function walkInRecord() {
+        return {
+          id: WALKIN,
+          name: walkInDraft.name.trim() || "New household",
+          phone: walkInDraft.phone.trim() || "No phone",
+          householdSize: walkInDraft.size,
+          pickupType: "prepacked",
+        };
+      }
+      function startWalkIn(prefill) {
+        const text = String(prefill || "").trim(),
+          digits = /^[\d\s()+-]+$/.test(text) && /\d/.test(text);
+        walkInDraft = {
+          name: digits ? "" : text,
+          phone: digits ? text : "",
+          size: 1,
+          token: null,
+        };
+        arrivalDrafts.delete(WALKIN);
+        current = WALKIN;
+        switchView("checkin");
+        $("detail").scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      function renderWalkIn(box, draft) {
+        box.append(
+          el("h2", "Pre-Packed Pickup"),
+          el(
+            "p",
+            "For a household that did not pre-register. They receive a pre-packed box.",
+            "small muted",
+          ),
+        );
+        const nameLabel = el("label", "Name");
+        nameLabel.htmlFor = "walkName";
+        const name = el("input");
+        name.id = "walkName";
+        name.maxLength = 100;
+        name.value = walkInDraft.name;
+        name.placeholder = "First and last name";
+        name.setAttribute("autocomplete", "off");
+        name.setAttribute("autocapitalize", "words");
+        name.oninput = () => {
+          walkInDraft.name = name.value;
+          updatePreview(walkInRecord());
+        };
+        const phoneLabel = el("label", "Phone (optional)");
+        phoneLabel.htmlFor = "walkPhone";
+        const phone = el("input");
+        phone.id = "walkPhone";
+        phone.maxLength = 40;
+        phone.value = walkInDraft.phone;
+        phone.placeholder = "Leave blank if none";
+        phone.setAttribute("inputmode", "tel");
+        phone.setAttribute("autocomplete", "off");
+        phone.oninput = () => {
+          walkInDraft.phone = phone.value;
+          updatePreview(walkInRecord());
+        };
+        const sizeLabel = el("div", "Household size", "fieldLabel"),
+          stepper = el("div", undefined, "stepper"),
+          minus = el("button", "−"),
+          plus = el("button", "+");
+        minus.setAttribute("aria-label", "Fewer people");
+        plus.setAttribute("aria-label", "More people");
+        minus.onclick = () => {
+          walkInDraft.size = Math.max(1, walkInDraft.size - 1);
+          renderDetail();
+        };
+        plus.onclick = () => {
+          walkInDraft.size = Math.min(99, walkInDraft.size + 1);
+          renderDetail();
+        };
+        stepper.append(minus, el("span", String(walkInDraft.size), "value"), plus);
+        box.append(nameLabel, name, phoneLabel, phone, sizeLabel, stepper);
+        box.append(arrivalEditor(walkInRecord(), false));
+        const label = el("label", "Copies for this household");
+        label.htmlFor = "copies";
+        const copies = el("select");
+        copies.id = "copies";
+        [1, 2, 3].forEach((n) => {
+          const o = el("option", String(n));
+          o.value = n;
+          o.selected = n === 3;
+          copies.append(o);
+        });
+        if (draft?.copies) copies.value = draft.copies;
+        const actions = el("div", undefined, "actions"),
+          add = el(
+            "button",
+            carLine
+              ? "Check in Pre-Packed to " + lineName(carLine) + " line & print"
+              : "Check in Pre-Packed & print",
+            "primary" + (carLine ? " line-" + carLine : ""),
+          ),
+          cancel = el("button", "Cancel", "secondary");
+        add.onclick = submitWalkIn;
+        cancel.onclick = () => {
+          walkInDraft = null;
+          arrivalDrafts.delete(WALKIN);
+          current = null;
+          render();
+        };
+        actions.append(add, cancel);
+        const preview = el("div", undefined, "label");
+        preview.id = "labelPreview";
+        fillPreview(preview, walkInRecord());
+        box.append(label, copies, actions, preview);
+      }
+      async function submitWalkIn() {
+        if (busy || !walkInDraft) return;
+        const d = draftFor({ id: WALKIN }),
+          name = walkInDraft.name.trim();
+        if (!carLine) {
+          note("Choose this iPad’s line (Blue or Orange) at the top first.", true);
+          return;
+        }
+        if (!name) {
+          note("Enter the person’s name.", true);
+          return;
+        }
+        if (!/^\d{3}$/.test(d.number)) {
+          note("Enter the 3-digit number first.", true);
+          return;
+        }
+        const clash = records.find(
+          (x) => x.checkedInAt && x.arrival && x.arrival.number === d.number,
+        );
+        if (
+          clash &&
+          !confirm(
+            "Number " + d.number + " is already used for " + clash.name + ". Use it again?",
+          )
+        )
+          return;
+        // Kept on failure so a retry cannot add the household twice.
+        if (!walkInDraft.token) walkInDraft.token = uid();
+        const request = {
+          eventId: $("event").value,
+          name,
+          phone: walkInDraft.phone.trim(),
+          householdSize: walkInDraft.size,
+          copies: Number($("copies").value),
+          token: walkInDraft.token,
+          print: true,
+          arrival: { number: d.number, line: carLine, vehicle: d.vehicle.trim() },
+        };
+        let saved = false;
+        setBusy(true);
+        note("Adding Pre-Packed Pickup and sending labels…");
+        try {
+          const result = await api("addWalkIn", request);
+          saved = true;
+          watchPrint(result.job, name);
+          walkInDraft = null;
+          arrivalDrafts.delete(WALKIN);
+          current = result.id;
+          $("search").value = "";
+          await refresh();
+          note(
+            "Pre-Packed Pickup added for " +
+              name +
+              ". " +
+              (result.job ? guidance(result.job) : ""),
+            !!result.job && ["Failed", "Outcome unknown"].includes(result.job.status),
+          );
+        } catch (e) {
+          note(
+            saved
+              ? "Added, but the list could not refresh. Refresh before taking another action."
+              : e.message + " Your entry is kept; tap the button again to retry safely.",
+            true,
+          );
+        } finally {
+          setBusy(false);
+        }
+      }
+      function render() {
+        $("total").textContent = records.length;
+        $("arrived").textContent = records.filter((r) => r.checkedInAt).length;
+        $("remaining").textContent = records.filter(
+          (r) => !r.checkedInAt,
+        ).length;
+        $("selectionInfo").textContent = selected.size + " selected";
+        $("list").replaceChildren();
+        visible()
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .forEach((r) => {
+            const row = el(
+                "div",
+                undefined,
+                "row" + (current === r.id ? " selected" : ""),
+              ),
+              checkbox = el("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = selected.has(r.id);
+            checkbox.setAttribute(
+              "aria-label",
+              "Select " + r.name + " for advance printing",
+            );
+            checkbox.onchange = () => {
+              checkbox.checked ? selected.add(r.id) : selected.delete(r.id);
+              $("selectionInfo").textContent = selected.size + " selected";
+            };
+            const button = el("button", r.name, "person");
+            button.append(
+              el(
+                "span",
+                r.phone +
+                  " · " +
+                  r.householdSize +
+                  " people" +
+                  (r.walkIn ? " · Pre-Packed" : ""),
+              ),
+            );
+            button.append(
+              el(
+                "span",
+                r.errors.length
+                  ? "Needs review"
+                  : r.checkedInAt
+                    ? "Arrived" +
+                      (r.arrival
+                        ? " · #" +
+                          r.arrival.number +
+                          " · " +
+                          lineName(r.arrival.line)
+                        : "")
+                    : r.lastJob
+                      ? "Labels prepared · not arrived"
+                      : "Expected",
+                "status" + (r.errors.length ? " warn" : ""),
+              ),
+            );
+            button.onclick = () => {
+              current = r.id;
+              render();
+            };
+            row.append(checkbox, button);
+            $("list").append(row);
+          });
+        if (!visible().length) {
+          const empty = el(
+            "div",
+            "No matching households. Check the spelling, the event, or refresh the list.",
+            "empty",
+          );
+          const q = $("search").value.trim();
+          if (q && settings?.events?.length) {
+            const add = el(
+              "button",
+              "Not registered? Add “" + q + "” as a Pre-Packed Pickup",
+              "walkInButton",
+            );
+            add.style.marginTop = "12px";
+            add.onclick = () => startWalkIn(q);
+            empty.append(add);
+          }
+          $("list").append(empty);
+        }
+        renderDetail();
+        renderQueue();
+        setBusy(busy);
+      }
+      function renderDetail() {
+        const box = $("detail"),
+          draft =
+            detailId === current
+              ? {
+                  copies: $("copies")?.value,
+                  reason: $("reason")?.value,
+                  open: $("otherActions")?.open,
+                }
+              : null;
+        box.replaceChildren();
+        const r = records.find((r) => r.id === current);
+        detailId = current;
+        if (current === WALKIN && walkInDraft) {
+          renderWalkIn(box, draft);
+          return;
+        }
+        if (!r) {
+          box.append(el("div", "Select a household to check in.", "empty"));
+          return;
+        }
+        box.append(el("h2", r.name));
+        box.append(
+          el(
+            "span",
+            r.checkedInAt
+              ? "Arrived · " +
+                  new Date(r.checkedInAt).toLocaleTimeString([], {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  }) +
+                  (r.arrival ? " · " + arrivalText(r.arrival) : "")
+              : "Expected · not checked in",
+            "status",
+          ),
+        );
+        if (r.errors.length)
+          box.append(el("p", r.errors.join(" "), "notice error"));
+        if (r.duplicateCandidates?.length) {
+          const review = el("section", undefined, "notice");
+          review.append(
+            el("h3", "Review repeated ID: " + r.externalId),
+            el(
+              "p",
+              "Select the response to use for this household. If these are different households, correct their IDs in the source instead. This does not print or check anyone in.",
+              "small",
+            ),
+          );
+          if (settings?.admin) {
+            const label = el("label", "Response to use");
+            label.htmlFor = "duplicateChoice";
+            const choice = el("select");
+            choice.id = "duplicateChoice";
+            r.duplicateCandidates.forEach((c) => {
+              const o = el(
+                "option",
+                "Row " +
+                  c.sourceRow +
+                  " · " +
+                  c.submittedAt +
+                  " · " +
+                  c.name +
+                  " · " +
+                  c.phone +
+                  " · " +
+                  c.householdSize +
+                  " people",
+              );
+              o.value = c.key;
+              o.selected = r.duplicateReview?.candidateKey === c.key;
+              choice.append(o);
+            });
+            const reasonLabel = el(
+              "label",
+              "Why is this the correct response?",
+            );
+            reasonLabel.htmlFor = "duplicateReason";
+            const reason = el("input");
+            reason.id = "duplicateReason";
+            reason.placeholder =
+              "For example: confirmed updated household count";
+            reason.maxLength = 300;
+            const save = el("button", "Use selected response");
+            save.onclick = () => resolveGroup(r);
+            review.append(label, choice, reasonLabel, reason, save);
+          } else review.append(el("p", "A coordinator must review this ID."));
+          if (r.duplicateReview)
+            review.append(
+              el("p", "Last decision: " + r.duplicateReview.reason, "small"),
+            );
+          box.append(review);
+        }
+        if (r.reviewRequired) return;
+        if (r.lastJob && r.lastJob.revision !== r.revision)
+          box.append(
+            el(
+              "p",
+              "Details changed since the last label. Review before reprinting.",
+              "notice error",
+            ),
+          );
+        if (!r.checkedInAt) box.append(arrivalEditor(r, false));
+        const preview = el("div", undefined, "label");
+        preview.id = "labelPreview";
+        fillPreview(preview, r);
+        const label = el("label", "Copies for this household");
+        label.htmlFor = "copies";
+        const copies = el("select");
+        copies.id = "copies";
+        [1, 2, 3].forEach((n) => {
+          const o = el("option", String(n));
+          o.value = n;
+          o.selected = n === 3;
+          copies.append(o);
+        });
+        if (draft?.copies) copies.value = draft.copies;
+        box.append(label, copies);
+        const actions = el("div", undefined, "actions");
+        if (!r.checkedInAt) {
+          const check = el(
+            "button",
+            carLine
+              ? "Check in to " + lineName(carLine) + " line & print"
+              : "Check in & print",
+            "primary" + (carLine ? " line-" + carLine : ""),
+          );
+          check.onclick = () => action("checkin", r);
+          actions.append(check);
+        } else
+          actions.append(
+            el(
+              "p",
+              "Already checked in. Use an explicit reprint if more labels are needed.",
+              "small muted",
+            ),
+          );
+        box.append(actions, preview);
+        if (r.checkedInAt)
+          box.append(
+            el(
+              "p",
+              guidance(packingJob(r)),
+              "notice" + (needsAttention(r) ? " error" : ""),
+            ),
+          );
+        const secondary = el("details");
+        secondary.id = "otherActions";
+        secondary.open = !!draft?.open;
+        secondary.append(el("summary", "Other actions"));
+        if (!r.checkedInAt) {
+          const only = el("button", "Check in without printing");
+          only.onclick = () => action("checkinOnly", r);
+          secondary.append(only);
+        }
+        if (r.checkedInAt) {
+          secondary.append(
+            el(
+              "p",
+              "Correct the car details here if needed; the reprint uses them.",
+              "small muted",
+            ),
+            arrivalEditor(r, true),
+          );
+        }
+        const reason = el("input");
+        reason.id = "reason";
+        reason.value = draft?.reason || "";
+        reason.placeholder = "Reason for replacement labels";
+        reason.setAttribute("aria-label", "Reprint reason");
+        reason.style.marginTop = "12px";
+        const reprint = el("button", "Reprint labels");
+        reprint.style.marginTop = "10px";
+        reprint.onclick = () => action("reprint", r);
+        secondary.append(reason, reprint);
+        box.append(secondary);
+        r.jobs.forEach((j) => {
+          const job = el("div", undefined, "job");
+          job.append(
+            el("strong", j.status + " · " + j.copies + " label(s)"),
+            el("div", new Date(j.createdAt).toLocaleString()),
+            el("p", guidance(j)),
+          );
+          if (j.status === "Prepared") {
+            const resume = el("button", "Resume saved job");
+            resume.onclick = () => resumeJob(j.id);
+            job.append(resume);
+          }
+          if (j.providerId) {
+            if (j.providerState)
+              job.append(el("p", serviceGuidance(j), "small"));
+            const statusButton = el("button", "Check service status");
+            statusButton.onclick = () => checkJobStatus(j.id);
+            job.append(statusButton);
+          }
+          box.append(job);
+        });
+      }
+      async function refresh() {
+        // Only the newest read is applied, so a slow background read cannot undo a check-in.
+        const seq = ++readSeq;
+        const data = await api("listRegistrations", $("event").value);
+        if (seq !== readSeq) return;
+        records = data;
+        lastReadAt = new Date();
+        $("freshness").className = "small muted freshness";
+        $("freshness").textContent =
+          "List updated " +
+          lastReadAt.toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+        selected = new Set(
+          [...selected].filter((id) => records.some((r) => r.id === id)),
+        );
+        render();
+      }
+      async function action(kind, r) {
+        if (busy) return;
+        let arrival;
+        if (kind === "checkin" || kind === "checkinOnly") {
+          const d = draftFor(r);
+          if (!carLine) {
+            note(
+              "Choose this iPad’s line (Blue or Orange) at the top first.",
+              true,
+            );
+            return;
+          }
+          if (!/^\d{3}$/.test(d.number)) {
+            note("Enter the 3-digit number first.", true);
+            return;
+          }
+          const clash = records.find(
+            (x) =>
+              x.id !== r.id &&
+              x.checkedInAt &&
+              x.arrival &&
+              x.arrival.number === d.number,
+          );
+          if (
+            clash &&
+            !confirm(
+              "Number " +
+                d.number +
+                " is already used for " +
+                clash.name +
+                ". Use it again?",
+            )
+          )
+            return;
+          arrival = { number: d.number, line: carLine, vehicle: d.vehicle.trim() };
+        } else if (kind === "reprint" && r.checkedInAt && arrivalDrafts.has(r.id)) {
+          const d = arrivalDrafts.get(r.id);
+          if (d.number || d.line) {
+            if (!/^\d{3}$/.test(d.number) || !d.line) {
+              note(
+                "Correct the car details first: a 3-digit number and a line.",
+                true,
+              );
+              return;
+            }
+            arrival = { number: d.number, line: d.line, vehicle: d.vehicle.trim() };
+          }
+        }
+        if (
+          kind === "checkin" &&
+          r.lastJob &&
+          !confirm(
+            "Labels already exist for this household. Check in and print another set? Use Other actions to check in without printing.",
+          )
+        )
+          return;
+        const reason = $("reason") ? $("reason").value.trim() : "";
+        if (
+          kind === "reprint" &&
+          (reason.length < 5 ||
+            !confirm(
+              "Ask the packing team first. Reprint this household’s labels?",
+            ))
+        ) {
+          note(
+            "Enter a reason of at least five characters and confirm the reprint.",
+            true,
+          );
+          return;
+        }
+        const key = r.id + ":" + r.revision + ":" + kind;
+        if (!tokens.has(key)) tokens.set(key, uid());
+        const request = {
+          id: r.id,
+          revision: r.revision,
+          action: kind,
+          copies: Number($("copies").value),
+          token: tokens.get(key),
+          reason,
+          arrival,
+        };
+        let saved = false;
+        setBusy(true);
+        note(
+          "Saving " +
+            (kind === "checkin" ? "arrival and sending labels…" : "request…"),
+        );
+        try {
+          const result = await api("requestAction", request);
+          tokens.delete(key);
+          saved = true;
+          watchPrint(result.job, r.name);
+          arrivalDrafts.delete(r.id);
+          if (kind === "checkin" || kind === "checkinOnly")
+            $("search").value = "";
+          await refresh();
+          note(
+            (result.reused
+              ? "Already recorded" +
+                (result.arrival
+                  ? " as " + arrivalText(result.arrival)
+                  : "") +
+                ". "
+              : "Request saved. ") +
+              (result.job
+                ? result.job.status + " — " + guidance(result.job)
+                : "Checked in without printing. Notify the packing team manually."),
+            !!result.job &&
+              ["Failed", "Outcome unknown"].includes(result.job.status),
+          );
+        } catch (e) {
+          note(
+            saved
+              ? "Your action was saved, but the list could not refresh. Refresh before taking another action."
+              : e.message +
+                  " Refresh to check the saved state before retrying. The request token is preserved for a retry.",
+            true,
+          );
+        } finally {
+          setBusy(false);
+        }
+      }
+      async function resumeJob(id) {
+        if (busy) return;
+        setBusy(true);
+        try {
+          const job = await api("resumePrint", id);
+          watchPrint(
+            job,
+            records.find((x) => (x.jobs || []).some((j) => j.id === id))?.name,
+          );
+          await refresh();
+          note(
+            job.status + " — " + guidance(job),
+            ["Failed", "Outcome unknown"].includes(job.status),
+          );
+        } catch (e) {
+          note(
+            e.message + " Refresh to check the saved job before retrying.",
+            true,
+          );
+        } finally {
+          setBusy(false);
+        }
+      }
+      async function resolveGroup(r) {
+        if (busy) return;
+        const reason = $("duplicateReason").value.trim();
+        if (reason.length < 5) {
+          note("Enter a reason of at least five characters.", true);
+          return;
+        }
+        setBusy(true);
+        try {
+          const result = await api("resolveDuplicate", {
+            id: r.id,
+            revision: r.revision,
+            groupKey: r.groupKey,
+            candidateKey: $("duplicateChoice").value,
+            reason,
+          });
+          await refresh();
+          note(result.message);
+        } catch (e) {
+          note(e.message, true);
+        } finally {
+          setBusy(false);
+        }
+      }
+      async function checkJobStatus(id) {
+        if (busy) return;
+        setBusy(true);
+        try {
+          const result = await api("checkPrintStatus", id);
+          await refresh();
+          note(
+            result.job?.providerState
+              ? serviceGuidance(result.job)
+              : guidance(result.job),
+            ["error", "expired"].includes(result.job?.providerState),
+          );
+        } catch (e) {
+          note(e.message, true);
+        } finally {
+          setBusy(false);
+        }
+      }
+      function renderSetup() {
+        const box = $("setupResult");
+        box.replaceChildren();
+        box.append(el("h3", "Setup checklist"));
+        setupSnapshot.checks.forEach((c) =>
+          box.append(
+            el(
+              "p",
+              (c.ok ? "Ready: " : "Needs setup: ") + c.label + " — " + c.detail,
+              "notice" + (c.ok ? "" : " error"),
+            ),
+          ),
+        );
+        if (setupSnapshot.checks.some((c) => c.key === "storage" && !c.ok)) {
+          const initialize = el("button", "Initialize working storage");
+          initialize.onclick = async () => {
+            if (busy) return;
+            setBusy(true);
+            try {
+              await api("setupStation");
+              setupSnapshot = await api("getSetupChecklist");
+              renderSetup();
+              note("Working storage initialized. Source sheet unchanged.");
+            } catch (e) {
+              note(e.message, true);
+            } finally {
+              setBusy(false);
+            }
+          };
+          box.append(initialize);
+        }
+        if (!setupSnapshot.tabs.length) return;
+        box.append(
+          el(
+            "p",
+            "Choose the intended pickup tab and verify its date. Enabling it does not import responses or print labels. Existing events and history are retained.",
+            "small",
+          ),
+        );
+        const tabLabel = el("label", "Source pickup tab");
+        tabLabel.htmlFor = "setupTab";
+        const choice = el("select");
+        choice.id = "setupTab";
+        setupSnapshot.tabs.forEach((t) => {
+          const option = el("option", t.title);
+          option.value = String(t.sheetId);
+          choice.append(option);
+        });
+        const label = el("label", "Pickup name shown to staff");
+        label.htmlFor = "setupEventLabel";
+        const input = el("input");
+        input.id = "setupEventLabel";
+        input.maxLength = 100;
+        const fillLabel = () => {
+          const event = setupSnapshot.events.find(
+            (e) => e.sourceSheetId === Number(choice.value),
+          );
+          input.value =
+            event?.label ||
+            setupSnapshot.tabs.find((t) => t.sheetId === Number(choice.value))
+              ?.title ||
+            "";
+        };
+        choice.onchange = fillLabel;
+        const selectedEvent = setupSnapshot.events.find(
+          (e) => e.id === $("event").value,
+        );
+        if (selectedEvent) choice.value = String(selectedEvent.sourceSheetId);
+        fillLabel();
+        const save = el("button", "Enable this pickup event");
+        save.onclick = saveSetupEvent;
+        const preview = el("button", "Preview source import");
+        preview.onclick = async () => {
+          if (busy) return;
+          setBusy(true);
+          try {
+            const report = await api("previewSheetImport");
+            $("importPreview").replaceChildren();
+            report.forEach((r) =>
+              $("importPreview").append(
+                el(
+                  "p",
+                  r.eventLabel +
+                    ": " +
+                    r.sourceRows +
+                    " source rows" +
+                    (r.lastListRow
+                      ? " (list ends at row " + r.lastListRow + ")"
+                      : "") +
+                    ", " +
+                    r.households +
+                    " ID groups, " +
+                    r.duplicateGroups +
+                    " repeated IDs to review." +
+                    (r.ignoredAfterList
+                      ? " " +
+                        r.ignoredAfterList +
+                        " row(s) below the last name ignored (totals or notes)."
+                      : ""),
+                  "small",
+                ),
+              ),
+            );
+          } catch (e) {
+            note(e.message, true);
+          } finally {
+            setBusy(false);
+          }
+        };
+        const output = el("div");
+        output.id = "importPreview";
+        box.append(tabLabel, choice, label, input, save, preview, output);
+      }
+      async function loadSetup() {
+        if (busy) return;
+        setBusy(true);
+        try {
+          setupSnapshot = await api("getSetupChecklist");
+          renderSetup();
+        } catch (e) {
+          note(e.message, true);
+        } finally {
+          setBusy(false);
+        }
+      }
+      async function saveSetupEvent() {
+        if (busy) return;
+        const label = $("setupEventLabel").value.trim();
+        if (label.length < 3) {
+          note("Enter a pickup label of at least three characters.", true);
+          return;
+        }
+        if (
+          !confirm(
+            "Enable pickup “" +
+              label +
+              "” from the selected source tab? Verify the date before continuing.",
+          )
+        )
+          return;
+        setBusy(true);
+        try {
+          const result = await api("configurePickupEvent", {
+            sourceSheetId: Number($("setupTab").value),
+            label,
+            configVersion: setupSnapshot.configVersion,
+          });
+          settings = await api("getStation");
+          $("event").replaceChildren();
+          settings.events.forEach((e) => {
+            const option = el("option", e.label);
+            option.value = e.id;
+            $("event").append(option);
+          });
+          $("event").value = result.eventId;
+          current = null;
+          selected.clear();
+          await refresh();
+          setupSnapshot = await api("getSetupChecklist");
+          renderSetup();
+          note(result.message);
+        } catch (e) {
+          note(e.message, true);
+        } finally {
+          setBusy(false);
+        }
+      }
+      $("search").oninput = render;
+      $("filter").onchange = render;
+      $("checkinView").onclick = () => switchView("checkin");
+      $("packingView").onclick = () => switchView("packing");
+      $("event").onchange = async () => {
+        current = null;
+        selected.clear();
+        await runRefresh();
+      };
+      async function runRefresh() {
+        if (busy) return;
+        setBusy(true);
+        try {
+          await refresh();
+        } catch (e) {
+          $("freshness").className = "small freshness stale";
+          $("freshness").textContent =
+            "List may be out of date. Last update: " +
+            (lastReadAt ? lastReadAt.toLocaleTimeString() : "never");
+          note(e.message, true);
+        } finally {
+          setBusy(false);
+        }
+      }
+      // Background refresh leaves buttons enabled, so the list no longer greys out.
+      async function quietRefresh() {
+        if (busy || !settings) return;
+        try {
+          await refresh();
+        } catch (e) {
+          $("freshness").className = "small freshness stale";
+          $("freshness").textContent =
+            "List may be out of date. Last update: " +
+            (lastReadAt ? lastReadAt.toLocaleTimeString() : "never");
+        }
+      }
+      $("refresh").onclick = runRefresh;
+      $("lineBlue").onclick = () => setLine("blue");
+      $("addWalkIn").onclick = () => startWalkIn("");
+      $("lineOrange").onclick = () => setLine("orange");
+      $("selectAll").onclick = () => {
+        visible().forEach((r) => selected.add(r.id));
+        render();
+      };
+      $("batch").onclick = async () => {
+        if (busy) return;
+        const rows = records.filter((r) => selected.has(r.id)),
+          copies = Number($("batchCopies").value);
+        const blocked = rows.filter((r) => r.reviewRequired || r.errors.length);
+        if (blocked.length) {
+          note(
+            blocked.length +
+              " selected household(s) need review. Deselect them or resolve the issues before printing. Nothing was sent.",
+            true,
+          );
+          return;
+        }
+        if (!rows.length) {
+          note("Select households first.", true);
+          return;
+        }
+        if (rows.length > 50) {
+          note(
+            "Print up to 50 households per batch. Split larger batches.",
+            true,
+          );
+          return;
+        }
+        if (
+          !confirm(
+            "Prepare up to " +
+              rows.length * copies +
+              " labels for " +
+              rows.length +
+              " households? This does not mark them arrived.",
+          )
+        )
+          return;
+        setBusy(true);
+        let submitted = 0,
+          skipped = 0;
+        try {
+          for (const r of rows) {
+            const key = r.id + ":" + r.revision + ":advance";
+            if (!tokens.has(key)) tokens.set(key, uid());
+            const result = await api("requestAction", {
+              id: r.id,
+              revision: r.revision,
+              action: "advance",
+              copies,
+              token: tokens.get(key),
+            });
+            tokens.delete(key);
+            if (result.reused) skipped++;
+            else submitted++;
+            if (
+              result.job &&
+              !["Submitted", "Confirmed by staff"].includes(result.job.status)
+            )
+              throw new Error(
+                "Batch paused at " +
+                  r.name +
+                  ": " +
+                  result.job.status +
+                  ". Check the station before reprinting.",
+              );
+            note(
+              "Processed " +
+                (submitted + skipped) +
+                " of " +
+                rows.length +
+                " households…",
+            );
+          }
+          note(
+            "Batch finished: " +
+              submitted +
+              " submitted; " +
+              skipped +
+              " already prepared.",
+          );
+        } catch (e) {
+          note(
+            e.message +
+              " Completed requests remain recorded; retrying advance printing skips those records.",
+            true,
+          );
+        } finally {
+          try {
+            await refresh();
+          } catch (_) {}
+          setBusy(false);
+        }
+      };
+      async function enrollThisDevice() {
+        if (busy) return;
+        setBusy(true);
+        $("deviceMessage").textContent = "Authorizing this iPad…";
+        try {
+          const result = await api("enrollDevice", $("deviceCode").value);
+          deviceToken = result.token;
+          const saved = rememberDeviceToken(result.token);
+          $("deviceCode").value = "";
+          await loadApplication();
+          note(
+            saved
+              ? "This iPad is authorized for check-in and printing."
+              : "This browser could not save its authorization. Access works only in this open page; ask the coordinator to test browser storage before pickup.",
+            !saved,
+          );
+        } catch (e) {
+          $("deviceMessage").textContent = e.message;
+        } finally {
+          setBusy(false);
+        }
+      }
+      async function loadDevices() {
+        const devices = await api("listDeviceAccess");
+        $("deviceList").replaceChildren();
+        if (!devices.length)
+          $("deviceList").append(el("p", "No enrolled devices."));
+        devices.forEach((d) => {
+          const row = el("div", undefined, "job");
+          row.append(
+            el("strong", d.label),
+            el(
+              "p",
+              d.revokedAt
+                ? "Revoked"
+                : "Expires " + new Date(d.expiresAt).toLocaleDateString(),
+            ),
+          );
+          if (!d.revokedAt) {
+            const revoke = el("button", "Revoke this iPad");
+            revoke.onclick = async () => {
+              if (
+                busy ||
+                !confirm(
+                  "Revoke " +
+                    d.label +
+                    "? It will need a new setup code. Jobs already sent are not canceled.",
+                )
+              )
+                return;
+              setBusy(true);
+              try {
+                await api("revokeDevice", d.id);
+                await loadDevices();
+                note("Device access revoked for future requests.");
+              } catch (e) {
+                note(e.message, true);
+              } finally {
+                setBusy(false);
+              }
+            };
+            row.append(revoke);
+          }
+          $("deviceList").append(row);
+        });
+      }
+      $("enroll").onclick = enrollThisDevice;
+      $("createDeviceCode").onclick = async () => {
+        if (busy) return;
+        setBusy(true);
+        try {
+          const result = await api("createDeviceEnrollment", {
+            label: $("newDeviceLabel").value,
+          });
+          $("enrollmentCode").textContent =
+            result.label +
+            " — PIN " +
+            result.code +
+            " — works once, expires " +
+            new Date(result.expiresAt).toLocaleTimeString() +
+            ". Five wrong tries cancel it.";
+        } catch (e) {
+          note(e.message, true);
+        } finally {
+          setBusy(false);
+        }
+      };
+      $("loadDevices").onclick = async () => {
+        if (busy) return;
+        setBusy(true);
+        try {
+          await loadDevices();
+        } catch (e) {
+          note(e.message, true);
+        } finally {
+          setBusy(false);
+        }
+      };
+      $("setup").onclick = loadSetup;
+      $("sync").onclick = async () => {
+        if (busy) return;
+        setBusy(true);
+        try {
+          const result = await api("syncResponses");
+          await refresh();
+          note(
+            "Imported " +
+              result.imported +
+              " household records. " +
+              result.unassigned +
+              " unassigned; " +
+              result.needsReview +
+              " need review." +
+              (result.ignoredAfterList
+                ? " " +
+                  result.ignoredAfterList +
+                  " row(s) below the list ignored."
+                : ""),
+          );
+          $("syncTime").textContent = "Source refreshed just now";
+        } catch (e) {
+          note(e.message, true);
+        } finally {
+          setBusy(false);
+        }
+      };
+      window.addEventListener("offline", () =>
+        note(
+          "Connection lost. Check-in cannot be saved until you reconnect. Refresh before retrying.",
+          true,
+        ),
+      );
+      window.addEventListener("online", () =>
+        note(
+          "Connection restored. Refresh the list to check saved arrivals before retrying.",
+        ),
+      );
+      setInterval(() => {
+        if (
+          settings &&
+          !busy &&
+          !document.hidden &&
+          navigator.onLine !== false &&
+          !["INPUT", "SELECT", "TEXTAREA"].includes(
+            document.activeElement?.tagName,
+          )
+        )
+          quietRefresh();
+      }, 30000);
+      async function loadApplication() {
+        settings = await api("getStation");
+        $("station").textContent = settings.deviceLabel || settings.station;
+        $("adminTools").hidden = !settings.admin;
+        $("event").replaceChildren();
+        settings.events.forEach((e) => {
+          const option = el("option", e.label);
+          option.value = e.id;
+          $("event").append(option);
+        });
+        $("syncTime").textContent = settings.lastSync
+          ? "Source refreshed " + new Date(settings.lastSync).toLocaleString()
+          : "Source has not been imported yet";
+        $("deviceGate").hidden = true;
+        $("staffApp").hidden = false;
+        renderLineToggle();
+        if (!settings.configured)
+          note(
+            "Print service is not configured. A coordinator must finish printer setup.",
+            true,
+          );
+        if (settings.events.length) await refresh();
+        else note("A coordinator must configure a pickup event.", true);
+      }
+      const stationReady = (async () => {
+        setBusy(true);
+        $("demo").hidden = !demo;
+        try {
+          const bootstrap = await api("getBootstrap");
+          authMode = bootstrap.authMode;
+          api("getBuild").then(renderBuild, () => renderBuild(null));
+          if (authMode === "devices" && !coordinatorMode) {
+            deviceToken = storedDeviceToken();
+            if (!deviceToken) {
+              showDeviceGate("Enter the setup PIN from your coordinator.");
+              return;
+            }
+          }
+          await loadApplication();
+        } catch (e) {
+          if (authMode === "devices" && !coordinatorMode)
+            showDeviceGate(e.message);
+          else {
+            $("staffApp").hidden = false;
+            note(e.message, true);
+          }
+        } finally {
+          setBusy(false);
+        }
+      })();
+    </script>
+  </body>
+</html>
