@@ -18,6 +18,9 @@ jobs:
       - run: npm run lint -- --max-warnings=0
       - run: npm run typecheck
       - run: npm test
+      - name: Pickup-station tests
+        run: npm test
+        working-directory: tools/pickup-station
       - run: npm run test:emulator
       - run: npm run build:test
       - run: npx playwright install --with-deps chromium
