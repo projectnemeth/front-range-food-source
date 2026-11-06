@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test tests/core.test.ts",
+    "test": "node --import tsx --test tests/core.test.ts tests/fulfillment.test.ts",
     "test:emulator": "node scripts/test-env.mjs ./node_modules/.bin/firebase emulators:exec --project demo-food-source --only auth,firestore \"node --import tsx --test --test-concurrency=1 tests/firestore.test.ts\"",
     "test:browser": "node scripts/test-env.mjs ./node_modules/.bin/playwright test",
     "build:test": "node scripts/test-env.mjs ./node_modules/.bin/next build",
