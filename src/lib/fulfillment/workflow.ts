@@ -47,8 +47,8 @@ export function readyForHandoff(order: FulfillmentOrder, runner?: string) {
 }
 
 /** Pure domain operation, not an API or a persistence/authentication boundary.
- * The future server must derive Actor from credentials and commit version checks
- * and operation receipts atomically. No production module imports this yet.
+ * Callers must derive Actor from credentials. The internal store commits version
+ * checks and operation receipts atomically; no live endpoint exposes it yet.
  */
 export function applyCommand(
   current: FulfillmentOrder,
@@ -151,7 +151,10 @@ export function applyCommand(
       case "approve": {
         requireState(coordinator, "forbidden");
         const resolution = order.resolutions[command.lineId];
-        requireState(resolution, "unresolvedLine");
+        requireState(
+          Object.hasOwn(order.resolutions, command.lineId) && resolution,
+          "unresolvedLine",
+        );
         resolution.approvedBy = actor.id;
         resolution.reason = command.reason;
         break;
@@ -171,7 +174,10 @@ export function applyCommand(
         );
         for (const line of lines) {
           const resolution = order.resolutions[line.id];
-          requireState(resolution, "unresolvedLine");
+          requireState(
+            Object.hasOwn(order.resolutions, line.id) && resolution,
+            "unresolvedLine",
+          );
           requireState(
             (resolution.quantity === line.quantity &&
               !resolution.replacement) ||

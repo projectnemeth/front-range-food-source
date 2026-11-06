@@ -51,6 +51,18 @@ function pack(order: FulfillmentOrder, stage: Stage): FulfillmentOrder {
 const arrive = (order: FulfillmentOrder) =>
   run(order, { type: "arrival", arrival }, actors.bridge);
 
+test("approval cannot resolve inherited object keys that are not picked lines", () => {
+  const order = make();
+  fails("unresolvedLine", () =>
+    run(
+      order,
+      { type: "approve", lineId: "toString", reason: "Invalid line" },
+      actors.coordinator,
+    ),
+  );
+  assert.deepEqual(order.resolutions, {});
+});
+
 test("complete two-stage flow retains original requests and gathers dry while perishables wait", () => {
   const initial = make();
   let order = pack(initial, "advanceDry");
