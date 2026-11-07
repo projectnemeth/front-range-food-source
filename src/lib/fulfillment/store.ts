@@ -1,5 +1,15 @@
 import { createHash } from "node:crypto";
-import type { Firestore, Transaction } from "firebase-admin/firestore";
+import {
+  FieldPath,
+  type Firestore,
+  type Transaction,
+} from "firebase-admin/firestore";
+import {
+  dryDetail,
+  drySummary,
+  type DryLocation,
+  type DryResponse,
+} from "./views";
 import { z } from "zod";
 import {
   commandSchema,
@@ -45,8 +55,8 @@ function check(condition: unknown, code: string): asserts condition {
 }
 
 /** Internal server service. Callers must authenticate uid before invoking it.
- * No HTTP route or pilot integration exposes this service yet. Permissions are
- * re-read inside every transaction, including operation replay.
+ * Permissions are re-read inside every transaction, including operation replay.
+ * The dry-packing API is feature-gated; no pilot integration is exposed.
  */
 export class FulfillmentStore {
   constructor(
@@ -142,7 +152,76 @@ export class FulfillmentStore {
     });
   }
 
-  async execute(uid: string, input: unknown): Promise<OperationResult> {
+  async readDry(uid: string, input: unknown): Promise<DryResponse> {
+    const request = z
+      .object({
+        eventId: documentId,
+        cursor: documentId.optional(),
+        orderId: documentId.optional(),
+      })
+      .strict()
+      .parse(input);
+    return this.db.runTransaction(async (tx) => {
+      const actor = await this.authorize(tx, request.eventId, uid);
+      check(
+        actor.role === "coordinator" || actor.role === "packer",
+        "forbidden",
+      );
+      let query = this.db
+        .collection("fulfillmentOrders")
+        .where("manifest.eventId", "==", request.eventId)
+        .orderBy(FieldPath.documentId())
+        .limit(51);
+      if (request.cursor) query = query.startAfter(request.cursor);
+      const records = await tx.get(query);
+      const selected = request.orderId
+        ? await tx.get(
+            this.db.collection("fulfillmentOrders").doc(request.orderId),
+          )
+        : null;
+      if (selected)
+        check(
+          selected.exists &&
+            selected.data()!.manifest.eventId === request.eventId,
+          "orderNotFound",
+        );
+      const locations = await tx.get(
+        this.event(request.eventId).collection("locations").limit(201),
+      );
+      check(locations.size <= 200, "tooManyLocations");
+      const available: DryLocation[] = locations.docs
+        .filter((doc) => doc.data().active === true)
+        .map((doc) => {
+          const data = doc.data();
+          return {
+            code: data.code,
+            capacity: data.capacity,
+            count: data.count,
+            orderId: data.orderId,
+          };
+        });
+      return {
+        actorId: actor.id,
+        role: actor.role,
+        orders: records.docs
+          .slice(0, 50)
+          .map((doc) => drySummary(doc.data() as FulfillmentOrder)),
+        nextCursor: records.size > 50 ? records.docs[49].id : null,
+        detail: selected
+          ? dryDetail(selected.data() as FulfillmentOrder)
+          : null,
+        locations: available.sort((a, b) =>
+          a.code.localeCompare(b.code, undefined, { numeric: true }),
+        ),
+      };
+    });
+  }
+
+  async execute(
+    uid: string,
+    input: unknown,
+    scope: "all" | "dry" = "all",
+  ): Promise<OperationResult> {
     const request = envelopeSchema.parse(input);
     // Arrival requires a separately authenticated bridge; staff cannot forge it.
     check(request.command.type !== "arrival", "bridgeRequired");
@@ -159,6 +238,27 @@ export class FulfillmentStore {
       check(snapshot.exists, "orderNotFound");
       const current = snapshot.data() as FulfillmentOrder;
       check(current.manifest.eventId === request.eventId, "forbidden");
+      if (scope === "dry") {
+        check(
+          actor.role === "coordinator" || actor.role === "packer",
+          "forbidden",
+        );
+        const command = request.command;
+        check(
+          ["claim", "resolve", "approve", "pack"].includes(command.type),
+          "dryOnly",
+        );
+        if ("stage" in command)
+          check(command.stage === "advanceDry", "dryOnly");
+        if ("lineId" in command)
+          check(
+            current.manifest.lines.some(
+              (line) =>
+                line.id === command.lineId && line.stage === "advanceDry",
+            ),
+            "dryOnly",
+          );
+      }
       if (receipt.exists) {
         check(receipt.data()!.fingerprint === fingerprint, "operationConflict");
         return {

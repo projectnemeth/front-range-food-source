@@ -12,6 +12,9 @@ import { FulfillmentStore, fulfillmentKey } from "../src/lib/fulfillment/store";
 import { WorkflowError } from "../src/lib/fulfillment/workflow";
 import { manifest, arrival } from "./fixtures/fulfillment";
 import type { Command } from "../src/lib/fulfillment/model";
+import { createFulfillmentOrder } from "../src/lib/fulfillment/model";
+import { adminAuth } from "../src/lib/firebase-admin";
+import { GET, POST } from "../src/app/api/fulfillment/dry/route";
 
 let env: RulesTestEnvironment;
 const store = new FulfillmentStore(adminDb, () => "2026-11-07T16:00:00Z");
@@ -313,5 +316,123 @@ test("cross-event commands and direct Firestore clients cannot access fulfillmen
         { active: true, role: "coordinator" },
       ),
     );
+  }
+});
+
+test("dry reads paginate every order and exclude source and perishable details", async () => {
+  const batch = adminDb.batch();
+  for (let i = 0; i < 52; i++) {
+    const id = `page-${String(i).padStart(3, "0")}`;
+    batch.set(
+      adminDb.doc(`fulfillmentOrders/${id}`),
+      createFulfillmentOrder({ ...manifest, id }),
+    );
+  }
+  await batch.commit();
+  const first = await store.readDry("packer", {
+    eventId: manifest.eventId,
+    orderId: "page-000",
+  });
+  assert.equal(first.orders.length, 50);
+  assert.equal(first.nextCursor, "page-049");
+  assert.equal(first.detail!.lines.length, 2);
+  assert.equal(first.detail!.perishableCount, 3);
+  assert.equal("source" in first.detail!, false);
+  assert.equal("notes" in first.orders[0], false);
+  const next = await store.readDry("packer", {
+    eventId: manifest.eventId,
+    cursor: first.nextCursor,
+  });
+  assert.equal(next.orders.length, 2);
+  assert.equal(next.nextCursor, null);
+  await rejects(
+    "forbidden",
+    store.readDry("runner", { eventId: manifest.eventId }),
+  );
+  await event().collection("staff").doc("packer").update({ active: false });
+  await rejects(
+    "forbidden",
+    store.readDry("packer", { eventId: manifest.eventId }),
+  );
+});
+
+test("dry API is feature-gated and authenticates accounts without client profiles", async () => {
+  const prior = process.env.FULFILLMENT_PHASE_TWO_ENABLED;
+  const url = `http://localhost/api/fulfillment/dry?eventId=${manifest.eventId}`;
+  try {
+    delete process.env.FULFILLMENT_PHASE_TWO_ENABLED;
+    assert.equal((await GET(new Request(url))).status, 404);
+    assert.equal(
+      (await POST(new Request(url, { method: "POST" }))).status,
+      404,
+    );
+    process.env.FULFILLMENT_PHASE_TWO_ENABLED = "true";
+    assert.equal((await GET(new Request(url))).status, 401);
+    const token = await adminAuth.createCustomToken("packer");
+    const authResponse = await fetch(
+      "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=fake-api-key",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, returnSecureToken: true }),
+      },
+    );
+    assert.ok(authResponse.ok);
+    const { idToken } = (await authResponse.json()) as { idToken: string };
+    const headers = {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+    };
+    await store.create("coordinator", "create", manifest);
+    const read = await GET(new Request(url, { headers }));
+    assert.equal(read.status, 200);
+    assert.equal(read.headers.get("Cache-Control"), "private, no-store");
+    const request = {
+      eventId: manifest.eventId,
+      orderId: manifest.id,
+      operationId: "http-claim",
+      expectedVersion: 0,
+      command: { type: "claim", stage: "advanceDry" },
+    };
+    const post = (body: unknown) =>
+      POST(
+        new Request(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        }),
+      );
+    assert.equal((await post({ ...request, uid: "coordinator" })).status, 400);
+    assert.equal(
+      (
+        await post({
+          ...request,
+          command: { type: "claim", stage: "afterArrival" },
+        })
+      ).status,
+      409,
+    );
+    assert.equal((await post(request)).status, 200);
+    assert.equal((await (await post(request)).json()).replayed, true);
+    assert.equal(
+      (
+        await post({
+          ...request,
+          operationId: "other",
+          command: {
+            type: "control",
+            state: "cancelled",
+            reason: "Not allowed here",
+          },
+        })
+      ).status,
+      409,
+    );
+    await event().collection("staff").doc("packer").update({ active: false });
+    assert.equal((await GET(new Request(url, { headers }))).status, 403);
+    assert.equal((await post(request)).status, 403);
+  } finally {
+    if (prior === undefined) delete process.env.FULFILLMENT_PHASE_TWO_ENABLED;
+    else process.env.FULFILLMENT_PHASE_TWO_ENABLED = prior;
   }
 });
