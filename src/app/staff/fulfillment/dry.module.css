@@ -37,6 +37,8 @@
   gap: 1.2rem;
 }
 .panel {
+  min-width: 0;
+  overflow-wrap: anywhere;
   background: #fff;
   border: 1px solid #cddbd2;
   border-radius: 12px;

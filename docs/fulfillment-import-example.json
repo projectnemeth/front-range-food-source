@@ -1,0 +1,37 @@
+[
+  {
+    "id": "source-placeholder",
+    "eventId": "example-event",
+    "source": {
+      "kind": "googleSheet",
+      "key": "example-sheet/tab/registration-001",
+      "revision": "example-revision-1"
+    },
+    "mappingVersion": "fictional-v1",
+    "householdLabel": "Example household",
+    "notes": "Fictional rehearsal only; not an operational allocation policy.",
+    "dietary": null,
+    "lines": [
+      {
+        "id": "rice",
+        "originalRequest": "Rice",
+        "item": "Rice",
+        "stage": "advanceDry",
+        "storage": "ambient",
+        "quantity": 2,
+        "unit": "bags",
+        "shelf": "Pantry 01"
+      },
+      {
+        "id": "produce",
+        "originalRequest": "Apples",
+        "item": "Apples",
+        "stage": "afterArrival",
+        "storage": "ambient",
+        "quantity": 1,
+        "unit": "bag",
+        "shelf": "Produce 01"
+      }
+    ]
+  }
+]

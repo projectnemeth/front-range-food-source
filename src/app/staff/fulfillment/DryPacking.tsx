@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -241,6 +242,11 @@ function Workspace({
           Sign out
         </button>
       </header>
+      <p>
+        <Link href="/staff/fulfillment/coordinator">
+          Coordinator setup and imports
+        </Link>
+      </p>
       <form
         className={styles.toolbar}
         onSubmit={(e) => {
