@@ -1,6 +1,10 @@
 # Phase Two fulfillment implementation status
 
-Updated November 7, 2026. Fourth development slice: coordinator event setup and reviewed incremental imports, behind the Phase Two feature gate. No deployment, production data access, or pilot integration has occurred.
+Updated November 8, 2026. Fifth development slice: reviewed source changes for unstarted orders, behind the Phase Two feature gate. No deployment, production data access, or pilot integration has occurred.
+
+## Latest reconciliation milestone
+
+Coordinators can review previous and proposed manifests and replace only unstarted orders. Transactional checks reject a stale preview if picking or other work began, and a mixed batch remains all-or-nothing. Updates preserve order identity, increment the version, retain both manifests in audit records, and keep perishables waiting for arrival. Holds, arrivals, resolutions, packages, and delivery prevent replacement. No preview automatically holds work or infers deletion. Live-source verification and reconciliation of physical work are still pending.
 
 ## Implemented locally
 
@@ -20,8 +24,8 @@ Updated November 7, 2026. Fourth development slice: coordinator event setup and 
 - Five-second refresh, stale/offline write prevention, and same-operation retries handle competing volunteers and uncertain save outcomes. Desktop and mobile captures were visually reviewed.
 
 - A coordinator workspace creates separate disabled events, configures staging capacities, manages existing packer/runner accounts, and explicitly enables/pauses packing. Administrator bootstrap is checked inside the transaction; coordinator grants cannot be replaced by staff controls.
-- Reviewed import previews accept explicitly mapped manifests, assign stable source-based order IDs, and classify new/unchanged/blocked records. Atomic apply reads only the saved preview and preserves all existing operational work. Duplicate IDs, changed manifests, stale setup, expired drafts, and conflicting source records block apply. This is not a live Google reader.
-- Eight coordinator emulator cases and one browser rehearsal cover setup, permissions, occupied locations, import idempotency, immutable preview/apply, blocked changes, and the transition from disabled setup to dry picking. CI now opts into Phase Two only for its emulator browser step.
+- Reviewed import previews accept explicitly mapped manifests, assign stable source-based order IDs, and classify new/unchanged/update/blocked records. Atomic apply reads only the saved preview and preserves all existing operational work. Duplicate IDs, changed manifests with existing work, stale setup, expired drafts, and conflicting source records block apply. This is not a live Google reader.
+- Twelve coordinator emulator cases and one browser rehearsal cover setup, permissions, occupied locations, import idempotency, immutable preview/apply, blocked changes, and the transition from disabled setup to dry picking. CI now opts into Phase Two only for its emulator browser step.
 
 Workspace details and limitations: [staff workspace](fulfillment-staff-workspace.md), [coordinator setup and imports](fulfillment-coordinator-workspace.md).
 
@@ -35,7 +39,7 @@ Only the new, disabled-by-default Phase Two routes and APIs expose these workflo
 
 The dry workspace works against explicitly provisioned records; it is not ready for a live pilot without source mapping and operational setup. Its endpoint derives UID from verified credentials and role from the event grant. Coordinator setup now provisions isolated events, positions, and grants for existing accounts. Account creation, additional coordinator provisioning, real Google-column mapping, live reading, and ongoing source reconciliation remain outstanding. All tests and rehearsals operate in emulators only. No existing event is enabled by this work. The first interface is English, uses coordinator-supplied event IDs, and stages all dry packages for a portion at one position; expanded event selection, language support, and multiple-position entry remain later improvements.
 
-Live source import/reconciliation, source-change handling, standard-box walk-up manifests with unknown contents, package storage compatibility, exact item-to-package allocations, partial handoff/restock, moving/reassigning packages and work, and closeout are not implemented. The current command schema deliberately rejects partial handoff fields rather than treating them as full delivery. Approved shortages preserve supplied quantities in the resolution records; user-facing reduced/unserved outcome reporting remains to be built.
+Live source import/reconciliation, changes to orders with existing work, standard-box walk-up manifests with unknown contents, package storage compatibility, exact item-to-package allocations, partial handoff/restock, moving/reassigning packages and work, and closeout are not implemented. The current command schema deliberately rejects partial handoff fields rather than treating them as full delivery. Approved shortages preserve supplied quantities in the resolution records; user-facing reduced/unserved outcome reporting remains to be built.
 
 The arrival operation consumes already validated logical arrivals in memory. No bridge credentials, outbox, retry service, printing changes, or Google-to-Firebase integration exist yet. These require the failure and authorization checks in the [implementation plan](fulfillment-implementation-plan.md).
 
@@ -48,6 +52,6 @@ Next development slice: verify the complete real-source field mapping and build 
 - All 8 browser tests pass (3 existing registration/printing regressions, 4 dry-workspace scenarios, and 1 coordinator/import rehearsal), including committed-save response loss, stale claims, offline/revoked access, and mobile-width layout.
 - The optimized Next.js build passes with isolated, nonsecret test configuration and the feature flag disabled by default.
 - A clean temporary copy installed the exact lockfile dependencies from the local npm cache. Standard TypeScript checking passes there without special exclusions.
-- All 29 emulator integration tests pass (11 existing, 10 fulfillment-store/API, and 8 coordinator/import). The emulator uses only `demo-food-source`; test setup explicitly checks the project and local emulator address.
+- All 33 emulator integration tests pass (11 existing, 10 fulfillment-store/API, and 12 coordinator/import). The full 32-test suite passed before the final source-identity guard; all 12 coordinator tests were rerun after that guard. The emulator uses only `demo-food-source`; test setup explicitly checks the project and local emulator address.
 
 The original workspace still has duplicated generated/type files and an incomplete nested `gaxios` installation. Rather than modify the pilot’s working environment, integration tests use a temporary source copy with clean dependencies and the existing temporary Java 21 runtime. No production credentials are passed to the emulator wrapper. Physical-pilot and live-integration checks remain outstanding. The standard workspace checks still require local dependency cleanup; the clean-copy results establish this milestone without modifying that environment.

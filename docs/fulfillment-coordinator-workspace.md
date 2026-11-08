@@ -24,13 +24,14 @@ Each record must explicitly include event and source references, source revision
 
 Submit at most ten records at a time, within the existing 20 KB request-body limit. Split larger input into separate reviewed batches. This is an incremental import; omission of a household never means cancellation or deletion.
 
-Preview persists a server-owned, immutable draft with three possible row results:
+Preview persists a server-owned, immutable draft with four possible row results:
 
 | Result | Meaning |
 | --- | --- |
 | New | No order or source reservation exists; applying will create an order |
 | Unchanged | The source maps to the identical saved manifest; applying preserves all work |
-| Blocked | Duplicate identity, wrong event/scope/mapping, conflicting reservation, or changed existing manifest requires separate review |
+| Update | Changed unstarted order; review previous and proposed manifests before replacement |
+| Blocked | Duplicate identity, wrong event/scope/mapping, conflicting reservation, or changed order with existing work requires separate review |
 
 The server assigns stable fulfillment IDs using event and source identity; the submitted `id` is a placeholder, not an instruction to overwrite a document. The preview shows the assigned ID and every mapped item, quantity, stage, note, and dietary instruction for review.
 
@@ -40,12 +41,14 @@ Existing claims, package locations, arrival state, and handoffs are never overwr
 
 ## Changed sources and remaining limits
 
-A changed existing manifest is blocked and displayed with its submitted details. Preview does not place that existing order on hold or claim the uploaded revision is authoritative. It cannot infer whether an uploaded file is a correct new source revision or a mistaken mapping. Reconciliation and an explicit hold/update workflow are still required before this can serve as ongoing live source synchronization. Until then, pause affected event work and resolve changes with the coordinator; do not treat a blocked preview as an applied update.
+A changed unstarted manifest displays both the accepted and proposed versions. Explicit apply replaces it only if its complete operational state still matches the preview. The order ID stays stable, its version increases, the source reservation is updated, and both manifests are retained in the audit. Claiming, holding, arrival, resolutions, packing, or delivery prevents replacement; a change after preview aborts the entire batch. Perishable portions remain waiting for arrival.
+
+A changed order with existing work is blocked and displayed with its submitted details. Preview does not place that existing order on hold or claim the uploaded revision is authoritative. It cannot infer whether an uploaded file is a correct new source revision or a mistaken mapping. Reconciliation and an explicit hold/update workflow are still required before this can serve as ongoing live source synchronization. Until then, pause affected event work and resolve changes with the coordinator; do not treat a blocked preview as an applied update.
 
 The screen does not fetch Google responses, validate all source columns against the real form, automatically resolve duplicate households, detect source deletions, create staff accounts, or migrate active pickup work. Saved drafts contain household information and remain server-only; draft expiry prevents applying them but does not delete them. Retention/cleanup and operational ownership must be configured before using real client data.
 
 ## Rehearsal and verification
 
-Use only the demo Firebase emulator project for the committed fictional fixtures. The browser rehearsal creates a disabled event, adds a position, previews without creating orders, applies once, blocks a changed record, and explicitly enables the event before the dry picker can claim it. Server tests additionally cover conflicting setup edits, revoked access, occupied positions, atomic apply retries, duplicate sources, expired/stale drafts, and cross-event authorization.
+Use only the demo Firebase emulator project for the committed fictional fixtures. The browser rehearsal creates a disabled event, adds a position, previews without creating orders, applies once, reviews and applies an unstarted change, and explicitly enables the event before the dry picker can claim it. Server tests additionally cover conflicting setup edits, revoked access, occupied positions, atomic apply retries, duplicate sources, expired/stale drafts, and cross-event authorization.
 
 The CI browser step opts into Phase Two only in its emulator process, so these new tests are exercised rather than skipped. Production and local runtime configuration remain unchanged. A live pilot still requires reviewed real-source mapping, staff/account setup, deployment-baseline checks, and the operational rehearsal described in the implementation plan.

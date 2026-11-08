@@ -100,17 +100,32 @@ test("coordinator prepares a disabled event, reviews an import and enables dry p
     .get();
   expect(orders.size).toBe(1);
   expect(orders.docs[0].data().portions.afterArrival.state).toBe("waiting");
-  // Re-preview the same source as changed: it must not overwrite existing work.
+  // An unstarted change shows both versions and requires explicit review.
   await page
     .getByLabel("Mapped order records", { exact: true })
     .fill(JSON.stringify([{ ...records[0], notes: "Changed source" }]));
   await page.getByRole("button", { name: "Generate import preview" }).click();
   await expect(
-    page.getByText("Example household — blocked", { exact: true }),
+    page.getByText("Example household — update", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Apply reviewed import" }),
-  ).toBeDisabled();
+    page.getByRole("heading", { name: "Previously accepted order" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Notes: Changed source", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel(
+      "I reviewed the event, identities, quantities, instructions and preparation stages.",
+    )
+    .check();
+  await page.getByRole("button", { name: "Apply reviewed import" }).click();
+  await expect(page.getByRole("main").getByRole("status")).toContainText(
+    "1 unstarted orders updated",
+  );
+  expect((await orders.docs[0].ref.get()).data()!.manifest.notes).toBe(
+    "Changed source",
+  );
   await page
     .getByLabel("I intend to enable packing for this Phase Two event.")
     .check();

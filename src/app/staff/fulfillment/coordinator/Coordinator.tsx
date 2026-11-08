@@ -145,7 +145,7 @@ function CoordinatorWorkspace({
         setDraft(null);
         setMessage(
           command.action === "apply"
-            ? `Import saved: ${body.count} new orders. Existing work preserved.`
+            ? `Import saved: ${body.count} new orders; ${body.updated ?? 0} unstarted orders updated. Existing work preserved.`
             : "Setup saved.",
         );
       }
@@ -416,7 +416,8 @@ function CoordinatorWorkspace({
               This accepts explicitly mapped JSON records, not a raw Google
               Sheet or CSV. It does not fetch or modify Google data. Submit at
               most ten records per preview (request limit 20 KB). Changed
-              existing records are blocked for separate reconciliation.
+              unstarted orders show both versions for review. Orders with
+              existing work remain blocked for separate reconciliation.
             </p>
             <form
               className={styles.form}
@@ -462,11 +463,41 @@ function CoordinatorWorkspace({
                   apply this preview.
                 </p>
                 {draft.rows.map((row, i) => (
-                  <details key={i} open={row.status === "blocked"}>
+                  <details
+                    key={i}
+                    open={row.status === "blocked" || row.status === "update"}
+                  >
                     <summary>
                       {row.manifest.householdLabel} — {row.status}
                     </summary>
                     <p>{row.reason}</p>
+                    {row.previousManifest && (
+                      <div>
+                        <h4>Previously accepted order</h4>
+                        <p>
+                          {row.previousManifest.householdLabel} · Revision{" "}
+                          {row.previousManifest.source.revision}
+                        </p>
+                        <p>
+                          Dietary:{" "}
+                          {row.previousManifest.dietary ?? "Not recorded"}
+                        </p>
+                        <p>Notes: {row.previousManifest.notes || "None"}</p>
+                        <ul>
+                          {row.previousManifest.lines.map((line) => (
+                            <li key={line.id}>
+                              {line.item}: {line.quantity} {line.unit} ·{" "}
+                              {line.stage === "advanceDry"
+                                ? "Advance dry"
+                                : "After arrival"}{" "}
+                              · {line.storage} · {line.shelf} · Requested:{" "}
+                              {line.originalRequest}
+                            </li>
+                          ))}
+                        </ul>
+                        <h4>Proposed replacement</h4>
+                      </div>
+                    )}
                     <p>
                       Order {row.manifest.id} · source {row.manifest.source.key}
                     </p>

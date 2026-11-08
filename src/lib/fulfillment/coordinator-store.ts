@@ -8,12 +8,22 @@ import {
   type ImportRow,
   type CoordinatorView,
 } from "./coordinator-contracts";
-import { createFulfillmentOrder } from "./model";
+import { createFulfillmentOrder, type FulfillmentOrder } from "./model";
 import { fulfillmentKey } from "./store";
 import { WorkflowError } from "./workflow";
 
 function check(condition: unknown, code: string): asserts condition {
   if (!condition) throw new WorkflowError(code);
+}
+// Require the complete untouched state, not just an absence of boxes.
+function unstarted(order: FulfillmentOrder) {
+  return (
+    fulfillmentKey(order) ===
+    fulfillmentKey({
+      ...createFulfillmentOrder(order.manifest),
+      version: order.version,
+    })
+  );
 }
 export class CoordinatorStore {
   constructor(
@@ -237,17 +247,40 @@ export class CoordinatorStore {
           reason = "Duplicate source identity in this preview";
         else if (sources[i].exists !== orders[i].exists)
           reason = "Source identity requires reconciliation";
-        else if (
-          orders[i].exists &&
-          fulfillmentKey(orders[i].data()!.manifest) !==
-            fulfillmentKey(manifest)
+        const previous = orders[i].data() as FulfillmentOrder | undefined;
+        if (
+          !reason &&
+          previous &&
+          (previous.manifest?.eventId !== command.eventId ||
+            previous.manifest?.id !== manifest.id ||
+            previous.manifest?.source.kind !== manifest.source.kind ||
+            previous.manifest?.source.key !== manifest.source.key)
         )
+          reason = "Source identity requires reconciliation";
+        const changed =
+          previous &&
+          fulfillmentKey(previous.manifest) !== fulfillmentKey(manifest);
+        if (!reason && changed && !unstarted(previous))
           reason =
-            "Existing order changed; preserve current work and reconcile separately";
+            "Existing work has started or is on hold; preserve it and reconcile separately";
         return {
           manifest,
-          status: reason ? "blocked" : orders[i].exists ? "unchanged" : "new",
-          reason,
+          status: reason
+            ? "blocked"
+            : changed
+              ? "update"
+              : orders[i].exists
+                ? "unchanged"
+                : "new",
+          reason:
+            reason ||
+            (changed ? "Replaces an unstarted order after review" : ""),
+          ...(!reason && changed
+            ? {
+                previousManifest: previous.manifest,
+                previousFingerprint: fulfillmentKey(previous),
+              }
+            : {}),
         };
       });
       const draft: ImportDraft = {
@@ -281,6 +314,7 @@ export class CoordinatorStore {
           applied: true,
           replayed: true,
           count: draft.rows.filter((row) => row.status === "new").length,
+          updated: draft.rows.filter((row) => row.status === "update").length,
         };
       check(Date.parse(draft.expiresAt) > Date.parse(now), "draftExpired");
       check(draft.eventVersion === config.version, "stalePreview");
@@ -304,7 +338,15 @@ export class CoordinatorStore {
           source = records[index + refs.length];
         if (row.status === "new")
           check(!existing.exists && !source.exists, "stalePreview");
-        else
+        else if (row.status === "update") {
+          check(
+            existing.exists &&
+              source.data()?.orderId === row.manifest.id &&
+              fulfillmentKey(existing.data()) === row.previousFingerprint &&
+              unstarted(existing.data() as FulfillmentOrder),
+            "stalePreview",
+          );
+        } else
           check(
             existing.exists &&
               source.data()?.orderId === row.manifest.id &&
@@ -331,6 +373,27 @@ export class CoordinatorStore {
             },
           );
         }
+      for (const [index, row] of draft.rows.entries()) {
+        if (row.status !== "update") continue;
+        const version = records[index].data()!.version + 1;
+        tx.set(refs[index], {
+          ...createFulfillmentOrder(row.manifest),
+          version,
+        });
+        tx.update(sourceRefs[index], { source: row.manifest.source });
+        tx.create(
+          refs[index].collection("activity").doc(`import-${command.draftId}`),
+          {
+            type: "sourceUpdate",
+            actor: uid,
+            at: now,
+            version,
+            draftId: command.draftId,
+            previousManifest: row.previousManifest,
+            manifest: row.manifest,
+          },
+        );
+      }
       tx.update(draftRef, { appliedAt: now });
       tx.create(event.collection("activity").doc(`import-${command.draftId}`), {
         type: "import",
@@ -338,11 +401,13 @@ export class CoordinatorStore {
         at: now,
         draftId: command.draftId,
         count: draft.rows.filter((row) => row.status === "new").length,
+        updated: draft.rows.filter((row) => row.status === "update").length,
       });
       return {
         applied: true,
         replayed: false,
         count: draft.rows.filter((row) => row.status === "new").length,
+        updated: draft.rows.filter((row) => row.status === "update").length,
       };
     });
   }

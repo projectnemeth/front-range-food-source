@@ -80,8 +80,10 @@ export type EventConfig = {
 };
 export type ImportRow = {
   manifest: Manifest;
-  status: "new" | "unchanged" | "blocked";
+  status: "new" | "unchanged" | "update" | "blocked";
   reason: string;
+  previousManifest?: Manifest;
+  previousFingerprint?: string;
 };
 export type ImportDraft = {
   id: string;

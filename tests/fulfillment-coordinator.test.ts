@@ -363,3 +363,110 @@ test("coordinator API is opt-in and rejects anonymous and nonexistent staff gran
     else process.env.FULFILLMENT_PHASE_TWO_ENABLED = previous;
   }
 });
+
+test("reviewed unstarted changes retain identity, audit both manifests and retry once", async () => {
+  await store.execute("admin", setup);
+  const first = await preview();
+  await apply();
+  const id = first.rows[0].manifest.id;
+  const replacement = {
+    ...input(),
+    notes: "No substitutions",
+    source: { ...input().source, revision: "v2" },
+  };
+  const draft = await preview("revision", [replacement]);
+  assert.equal(draft.rows[0].status, "update");
+  assert.deepEqual(draft.rows[0].previousManifest, first.rows[0].manifest);
+  const results = await Promise.all([apply("revision"), apply("revision")]);
+  assert.equal(results.filter((r) => "replayed" in r && !r.replayed).length, 1);
+  const ref = adminDb.doc(`fulfillmentOrders/${id}`);
+  const order = (await ref.get()).data()!;
+  assert.equal(order.version, 1);
+  assert.equal(order.manifest.notes, replacement.notes);
+  assert.equal(order.portions.afterArrival.state, "waiting");
+  assert.deepEqual(order.packages, []);
+  const audit = (
+    await ref.collection("activity").doc("import-revision").get()
+  ).data()!;
+  assert.deepEqual(audit.previousManifest, first.rows[0].manifest);
+  assert.equal(audit.manifest.notes, replacement.notes);
+  assert.equal(
+    (await preview("same", [replacement])).rows[0].status,
+    "unchanged",
+  );
+});
+
+test("claim after preview rejects the whole update batch without overwriting work", async () => {
+  await store.execute("admin", setup);
+  const first = await preview();
+  await apply();
+  const orderId = first.rows[0].manifest.id;
+  const fresh = {
+    ...input(),
+    source: { ...input().source, key: "example-sheet/tab/new" },
+  };
+  const draft = await preview("race-update", [
+    { ...input(), notes: "Changed" },
+    fresh,
+  ]);
+  assert.equal(draft.rows[0].status, "update");
+  await event().update({ enabled: true, status: "OPEN" });
+  await new FulfillmentStore(adminDb).execute("admin", {
+    eventId: manifest.eventId,
+    orderId,
+    operationId: "claim-race",
+    expectedVersion: 0,
+    command: { type: "claim", stage: "advanceDry" },
+  });
+  await rejects("stalePreview", apply("race-update"));
+  const order = (
+    await adminDb.doc(`fulfillmentOrders/${orderId}`).get()
+  ).data()!;
+  assert.equal(order.portions.advanceDry.state, "picking");
+  assert.equal(order.manifest.notes, input().notes);
+  assert.equal(
+    (await adminDb.doc(`fulfillmentOrders/${draft.rows[1].manifest.id}`).get())
+      .exists,
+    false,
+  );
+});
+
+test("held, arrived, resolved and packed orders cannot be replaced by source imports", async () => {
+  await store.execute("admin", setup);
+  const first = await preview();
+  await apply();
+  const ref = adminDb.doc(`fulfillmentOrders/${first.rows[0].manifest.id}`);
+  const original = (await ref.get()).data()!;
+  const cases = [
+    { control: "held", reason: "Review" },
+    { arrival: { id: "arrived" } },
+    { resolutions: { rice: { quantity: 1 } } },
+    { packages: [{ id: "box" }] },
+    { deliveredAt: now },
+  ];
+  for (const [i, change] of cases.entries()) {
+    await ref.set({ ...original, ...change });
+    assert.equal(
+      (await preview(`protected-${i}`, [{ ...input(), notes: "Changed" }]))
+        .rows[0].status,
+      "blocked",
+    );
+    await rejects("previewBlocked", apply(`protected-${i}`));
+    assert.deepEqual((await ref.get()).data(), { ...original, ...change });
+  }
+});
+
+test("a conflicting source reservation cannot replace another order", async () => {
+  await store.execute("admin", setup);
+  const draft = await preview();
+  await apply();
+  const ref = adminDb.doc(`fulfillmentOrders/${draft.rows[0].manifest.id}`);
+  await ref.update({ "manifest.eventId": "other-event" });
+  assert.equal(
+    (await preview("bad-pointer", [{ ...input(), notes: "Changed" }])).rows[0]
+      .status,
+    "blocked",
+  );
+  await rejects("previewBlocked", apply("bad-pointer"));
+  assert.equal((await ref.get()).data()!.manifest.eventId, "other-event");
+});
