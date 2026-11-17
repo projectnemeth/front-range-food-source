@@ -1,6 +1,10 @@
 # Phase Two fulfillment implementation status
 
-Updated November 8, 2026. Fifth development slice: reviewed source changes for unstarted orders, behind the Phase Two feature gate. No deployment, production data access, or pilot integration has occurred.
+Updated November 17, 2026. Sixth development slice: read-only source discovery and a local source-layout preflight. No deployment, household response-row access, or pilot integration occurred. Google metadata and headers were inspected read-only.
+
+## Latest source-discovery milestone
+
+The user confirmed itemized orders come from Google Form Responses. Neither the check-in workbook nor the accessible response-file copy has food-selection headers; the exact operational form/response URL is still needed. A local `fulfillment:preflight` command now checks complete header snapshots against explicit mappings, reports drift and unmapped columns, and never declares an import ready. It has no database or Google write path and is not wired into the manually normalized manifest importer. See [source findings, usage and remaining mapping work](fulfillment-source-mapping.md).
 
 ## Latest reconciliation milestone
 
@@ -55,3 +59,9 @@ Next development slice: verify the complete real-source field mapping and build 
 - All 33 emulator integration tests pass (11 existing, 10 fulfillment-store/API, and 12 coordinator/import). The full 32-test suite passed before the final source-identity guard; all 12 coordinator tests were rerun after that guard. The emulator uses only `demo-food-source`; test setup explicitly checks the project and local emulator address.
 
 The original workspace still has duplicated generated/type files and an incomplete nested `gaxios` installation. Rather than modify the pilot’s working environment, integration tests use a temporary source copy with clean dependencies and the existing temporary Java 21 runtime. No production credentials are passed to the emulator wrapper. Physical-pilot and live-integration checks remain outstanding. The standard workspace checks still require local dependency cleanup; the clean-copy results establish this milestone without modifying that environment.
+
+### November 17 source preflight verification
+
+The source-layout utility and CLI have seven regression cases covering matching layouts, missing requests/timestamps, drift, duplicates, wrong tabs, blank trailing cells, invalid inputs, and CLI exit codes. Existing fulfillment and core unit tests run alongside these. No application route, API, Firebase rule, pilot file, or runtime configuration was modified for this slice.
+
+Validation for this slice: all 26 unit tests passed (19 existing plus 7 source-preflight cases), ESLint passed with zero warnings, and standard TypeScript checking passed in a temporary copy installed from the exact lockfile. The root workspace still fails typechecking on the pre-existing duplicate `node 2` types. No browser or emulator rerun was needed for this isolated CLI/library addition; earlier integration results above are historical.
