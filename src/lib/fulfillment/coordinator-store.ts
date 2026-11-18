@@ -1,4 +1,9 @@
 import {
+  allocationWorkUnstarted,
+  type PackingAllocationDraft,
+  type PackingCandidate,
+} from "./packing-allocation";
+import {
   proposeAllocation,
   validateAllocation,
   type AllocationDraft,
@@ -106,6 +111,11 @@ export class CoordinatorStore {
       command.action === "allocationRead"
     )
       return this.allocation(uid, command);
+    if (
+      command.action === "packingAllocationPreview" ||
+      command.action === "packingAllocationApply"
+    )
+      return this.packingAllocation(uid, command);
     const event = this.event(command.eventId);
     const receipt = event
       .collection("setupOperations")
@@ -234,7 +244,27 @@ export class CoordinatorStore {
       const snapshot = await tx.get(draftRef);
       if (command.action === "allocationRead") {
         check(snapshot.exists, "draftNotFound");
-        return { allocationDraft: snapshot.data() as AllocationDraft };
+        const orders = await tx.get(
+          this.db
+            .collection("fulfillmentOrders")
+            .where("manifest.eventId", "==", command.eventId)
+            .limit(201),
+        );
+        check(orders.size <= 200, "packingCandidateLimit");
+        const packingCandidates: PackingCandidate[] = orders.docs.map((doc) => {
+          const order = doc.data() as FulfillmentOrder;
+          return {
+            id: doc.id,
+            household: order.manifest.householdLabel,
+            version: order.version,
+            unstarted: allocationWorkUnstarted(order),
+            lines: order.manifest.lines,
+          };
+        });
+        return {
+          allocationDraft: snapshot.data() as AllocationDraft,
+          packingCandidates,
+        };
       }
       const fingerprint = fulfillmentKey(command);
       if (command.action === "allocationPreview") {
@@ -285,6 +315,7 @@ export class CoordinatorStore {
         "staleAllocation",
       );
       check(item.exists || items.size < 200, "setupLimitExceeded");
+      check(!item.data()?.packingPlanId, "allocationAlreadyReleased");
       const allocated = validateAllocation(draft, command.quantities);
       const approved = {
         ...draft,
@@ -311,6 +342,232 @@ export class CoordinatorStore {
         previousDraftId: item.data()?.draftId ?? null,
       });
       return { allocationDraft: approved, replayed: false };
+    });
+  }
+
+  private async packingAllocation(
+    uid: string,
+    command: Extract<
+      CoordinatorCommand,
+      { action: "packingAllocationPreview" | "packingAllocationApply" }
+    >,
+  ) {
+    const event = this.event(command.eventId);
+    const ref = event
+      .collection("packingAllocationDrafts")
+      .doc(
+        command.action === "packingAllocationPreview"
+          ? command.operationId
+          : command.draftId,
+      );
+    const now = this.clock();
+    return this.db.runTransaction(async (tx) => {
+      const config = await this.coordinator(tx, command.eventId, uid);
+      const saved = await tx.get(ref);
+      if (command.action === "packingAllocationPreview" && saved.exists) {
+        check(
+          saved.data()!.actor === uid &&
+            saved.data()!.fingerprint === fulfillmentKey(command),
+          "operationConflict",
+        );
+        return { packingDraft: saved.data() as PackingAllocationDraft };
+      }
+      if (command.action === "packingAllocationApply") {
+        check(saved.exists && saved.data()!.actor === uid, "draftNotFound");
+        const draft = saved.data() as PackingAllocationDraft;
+        if (draft.appliedAt) return { packingApplied: true, replayed: true };
+        check(Date.parse(draft.expiresAt) > Date.parse(now), "draftExpired");
+        check(draft.eventVersion === config.version, "stalePreview");
+        const [planDoc, item] = await tx.getAll(
+          event.collection("allocationDrafts").doc(draft.planId),
+          event.collection("allocationItems").doc(draft.itemId),
+        );
+        const plan = planDoc.data() as AllocationDraft | undefined;
+        check(
+          plan?.approvedAt &&
+            plan.approved &&
+            item.data()?.draftId === draft.planId &&
+            item.data()?.version === draft.planVersion,
+          "staleAllocation",
+        );
+        check(!item.data()?.packingPlanId, "allocationAlreadyReleased");
+        const orderRefs = draft.rows.map((row) =>
+          this.db.collection("fulfillmentOrders").doc(row.orderId),
+        );
+        const orders = await tx.getAll(...orderRefs);
+        const bindingRefs = draft.rows.map((row) =>
+          event
+            .collection("allocationHouseholds")
+            .doc(fulfillmentKey(row.householdKey)),
+        );
+        const bindings = await tx.getAll(...bindingRefs);
+        for (const [i, row] of draft.rows.entries()) {
+          const order = orders[i].data() as FulfillmentOrder;
+          check(
+            !bindings[i].exists || bindings[i].data()!.orderId === row.orderId,
+            "packingHouseholdMismatch",
+          );
+          check(
+            orders[i].exists &&
+              fulfillmentKey(order) === row.orderFingerprint &&
+              allocationWorkUnstarted(order),
+            "stalePreview",
+          );
+        }
+        for (const [i, row] of draft.rows.entries()) {
+          const order = orders[i].data() as FulfillmentOrder;
+          const allocation = {
+            planId: plan.id,
+            itemId: draft.itemId,
+            householdKey: row.householdKey,
+            quantity: row.quantity,
+            approvedBy: plan.actor,
+            appliedBy: uid,
+            appliedAt: now,
+          };
+          if (!bindings[i].exists)
+            tx.create(bindingRefs[i], {
+              householdKey: row.householdKey,
+              orderId: row.orderId,
+            });
+          tx.update(orderRefs[i], {
+            allocations: { ...order.allocations, [row.line.id]: allocation },
+            version: order.version + 1,
+          });
+          tx.create(
+            orderRefs[i]
+              .collection("activity")
+              .doc(`packing-allocation-${draft.id}`),
+            {
+              type: "packingAllocationApplied",
+              actor: uid,
+              at: now,
+              version: order.version + 1,
+              lineId: row.line.id,
+              previousQuantity: row.before,
+              allocation,
+              originalRequest: row.line.originalRequest,
+            },
+          );
+        }
+        tx.update(event.collection("allocationItems").doc(draft.itemId), {
+          packingPlanId: draft.planId,
+        });
+        tx.update(ref, { appliedAt: now });
+        tx.create(
+          event.collection("activity").doc(`packing-allocation-${draft.id}`),
+          {
+            type: "packingAllocationApplied",
+            actor: uid,
+            at: now,
+            planId: draft.planId,
+            draftId: draft.id,
+            count: draft.rows.length,
+          },
+        );
+        return { packingApplied: true, replayed: false };
+      }
+      const planDoc = await tx.get(
+        event.collection("allocationDrafts").doc(command.planId),
+      );
+      const plan = planDoc.data() as AllocationDraft | undefined;
+      check(plan?.approvedAt && plan.approved, "allocationNotApproved");
+      const item = await tx.get(
+        event.collection("allocationItems").doc(plan.input.itemId),
+      );
+      check(item.data()?.draftId === plan.id, "staleAllocation");
+      check(!item.data()?.packingPlanId, "allocationAlreadyReleased");
+      check(
+        command.links.length === plan.approved.length &&
+          new Set(command.links.map((link) => link.householdKey)).size ===
+            command.links.length &&
+          new Set(command.links.map((link) => link.orderId)).size ===
+            command.links.length,
+        "allocationHouseholdsChanged",
+      );
+      const orders = await tx.getAll(
+        ...command.links.map((link) =>
+          this.db.collection("fulfillmentOrders").doc(link.orderId),
+        ),
+      );
+      const bindings = await tx.getAll(
+        ...command.links.map((link) =>
+          event
+            .collection("allocationHouseholds")
+            .doc(fulfillmentKey(link.householdKey)),
+        ),
+      );
+      const rows = command.links.map((link, index) => {
+        const share = plan.approved!.find((q) => q.key === link.householdKey);
+        const household = plan.input.households.find(
+          (h) => h.key === link.householdKey,
+        );
+        check(share && household, "allocationHouseholdsChanged");
+        const order = orders[index].data() as FulfillmentOrder | undefined;
+        check(
+          order && order.manifest.eventId === command.eventId,
+          "packingOrderNotFound",
+        );
+        check(
+          order.manifest.householdLabel === household.label,
+          "packingHouseholdMismatch",
+        );
+        check(
+          !bindings[index].exists ||
+            bindings[index].data()!.orderId === link.orderId,
+          "packingHouseholdMismatch",
+        );
+        check(
+          Object.values(order.allocations ?? {}).every(
+            (a) => a.householdKey === link.householdKey,
+          ),
+          "packingHouseholdMismatch",
+        );
+        check(allocationWorkUnstarted(order), "packingWorkStarted");
+        const line = order.manifest.lines.find(
+          (line) => line.id === link.lineId,
+        );
+        check(
+          line &&
+            line.item === plan.input.item &&
+            line.unit === plan.input.unit &&
+            order.manifest.lines.filter(
+              (candidate) =>
+                candidate.item === plan.input.item &&
+                candidate.unit === plan.input.unit,
+            ).length === 1,
+          "packingItemMismatch",
+        );
+        check(
+          !order.allocations || !Object.hasOwn(order.allocations, line.id),
+          "packingLineAlreadyAllocated",
+        );
+        return {
+          householdKey: link.householdKey,
+          household: household.label,
+          orderId: link.orderId,
+          line,
+          before: line.quantity,
+          quantity: share.quantity,
+          reason: share.reason,
+          orderFingerprint: fulfillmentKey(order),
+        };
+      });
+      const draft: PackingAllocationDraft = {
+        id: ref.id,
+        eventId: command.eventId,
+        actor: uid,
+        eventVersion: config.version,
+        planId: plan.id,
+        itemId: plan.input.itemId,
+        planVersion: item.data()!.version,
+        fingerprint: fulfillmentKey(command),
+        expiresAt: new Date(Date.parse(now) + 30 * 60 * 1000).toISOString(),
+        appliedAt: null,
+        rows,
+      };
+      tx.create(ref, draft);
+      return { packingDraft: draft };
     });
   }
 

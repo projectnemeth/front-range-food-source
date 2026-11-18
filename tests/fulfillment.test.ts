@@ -382,3 +382,104 @@ test("package custody cannot be stolen and partial handoff is not silently suppo
     ),
   );
 });
+
+test("packing uses allocation targets while retaining original requests and arrival gating", () => {
+  let order = make();
+  order.allocations = {
+    rice: {
+      planId: "rice-plan",
+      itemId: "rice",
+      householdKey: "family",
+      quantity: 4,
+      approvedBy: "coordinator",
+      appliedBy: "coordinator",
+      appliedAt: now,
+    },
+    milk: {
+      planId: "milk-plan",
+      itemId: "milk",
+      householdKey: "family",
+      quantity: 2,
+      approvedBy: "coordinator",
+      appliedBy: "coordinator",
+      appliedAt: now,
+    },
+  };
+  fails("arrivalRequired", () =>
+    run(order, { type: "claim", stage: "afterArrival" }),
+  );
+  order = run(order, { type: "claim", stage: "advanceDry" });
+  fails("excessQuantity", () =>
+    run(order, {
+      type: "resolve",
+      lineId: "rice",
+      quantity: 5,
+      replacement: null,
+      reason: null,
+    }),
+  );
+  order = run(order, {
+    type: "resolve",
+    lineId: "rice",
+    quantity: 4,
+    replacement: null,
+    reason: null,
+  });
+  order = run(order, {
+    type: "resolve",
+    lineId: "diapers",
+    quantity: 1,
+    replacement: null,
+    reason: null,
+  });
+  order = run(order, {
+    type: "pack",
+    stage: "advanceDry",
+    packages: [{ id: "box", location: "A01" }],
+  });
+  assert.equal(order.manifest.lines[0].quantity, 2);
+  assert.equal(order.resolutions.rice.quantity, 4);
+  assert.equal(order.portions.afterArrival.state, "waiting");
+});
+
+test("zero allocation requires explicit confirmation, produces no package and cannot deliver an empty order", () => {
+  let order = createFulfillmentOrder({
+    ...manifest,
+    lines: [manifest.lines[0]],
+  });
+  order.allocations = {
+    rice: {
+      planId: "empty",
+      itemId: "rice",
+      householdKey: "family",
+      quantity: 0,
+      approvedBy: "coordinator",
+      appliedBy: "coordinator",
+      appliedAt: now,
+    },
+  };
+  order = run(order, { type: "claim", stage: "advanceDry" });
+  fails("unresolvedLine", () =>
+    run(order, { type: "pack", stage: "advanceDry", packages: [] }),
+  );
+  fails("excessQuantity", () =>
+    run(order, {
+      type: "resolve",
+      lineId: "rice",
+      quantity: 1,
+      replacement: null,
+      reason: null,
+    }),
+  );
+  order = run(order, {
+    type: "resolve",
+    lineId: "rice",
+    quantity: 0,
+    replacement: null,
+    reason: null,
+  });
+  order = run(order, { type: "pack", stage: "advanceDry", packages: [] });
+  order = run(order, { type: "arrival", arrival }, actors.bridge);
+  assert.equal(readyForHandoff(order), false);
+  assert.equal(order.manifest.lines[0].originalRequest, "Rice");
+});

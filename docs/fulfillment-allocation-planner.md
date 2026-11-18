@@ -28,7 +28,7 @@ The creator approves their own preview; other event coordinators can read it. Ap
 
 **Approval saves a planning record only.** It does not reserve or decrement inventory, generate or change manifests, enable an event, claim work, change prepared boxes, or modify source responses. The coordinator must maintain stock availability outside this planner until inventory integration exists. Different item keys are treated as different items; use the same key for revisions and do not enter the same physical stock under multiple keys.
 
-Applying approved quantities to reviewed source requests is the next integration step. It must preserve original requests, link the approved plan/version, and reject changes to physical work until reconciled. Zero allocations must become explicit reviewed unavailable/shortage outcomes, never silently omitted requests or zero-quantity manifests (the current manifest schema requires positive requested quantities).
+Approved plans can now be applied through a separate [packing-quantity review](fulfillment-packing-allocations.md). It links all households to existing unstarted orders, preserves the original manifest and adds audited packing targets, including explicit zeros. Once applied, replacement approval for that item is blocked pending reconciliation. This does not reserve stock or automatically import source orders.
 
 Perishables remain after check-in. This planner does not set preparation stages or storage classes and cannot bypass arrival gating. Existing dry preparation and perishable timing rules remain in the fulfillment domain. No label-pilot files, Google data, Firebase rules or deployed configuration changed.
 

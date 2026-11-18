@@ -1,5 +1,6 @@
 import {
   commandSchema,
+  packingQuantity,
   type Actor,
   type FulfillmentOrder,
   type Stage,
@@ -132,13 +133,17 @@ export function applyCommand(
           line.stage === "advanceDry" || order.arrival,
           "arrivalRequired",
         );
-        requireState(command.quantity <= line.quantity, "excessQuantity");
+        requireState(
+          command.quantity <= packingQuantity(order, line),
+          "excessQuantity",
+        );
         requireState(
           !command.replacement || command.quantity > 0,
           "emptyReplacement",
         );
         const exception =
-          command.quantity !== line.quantity || !!command.replacement;
+          command.quantity !== packingQuantity(order, line) ||
+          !!command.replacement;
         requireState(!exception || command.reason, "reasonRequired");
         order.resolutions[line.id] = {
           quantity: command.quantity,
@@ -179,7 +184,7 @@ export function applyCommand(
             "unresolvedLine",
           );
           requireState(
-            (resolution.quantity === line.quantity &&
+            (resolution.quantity === packingQuantity(order, line) &&
               !resolution.replacement) ||
               resolution.approvedBy,
             "exceptionNeedsApproval",

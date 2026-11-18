@@ -462,6 +462,15 @@ function Checklist({
               <p>
                 {line.quantity} {line.unit} · {line.shelf}
               </p>
+              {line.allocationPlanId && (
+                <p>
+                  Coordinator allocation · plan {line.allocationPlanId}. Before
+                  allocation: {line.beforeAllocation} {line.unit}.
+                </p>
+              )}
+              {line.quantity === 0 && (
+                <p>No stock allocated. Confirm zero; do not pick this item.</p>
+              )}
               {outcome && (
                 <p>
                   {outcome.quantity} packed
@@ -488,7 +497,8 @@ function Checklist({
                   })
                 }
               >
-                Picked {line.item}
+                {line.quantity === 0 ? "Confirm zero for" : "Picked"}{" "}
+                {line.item}
               </button>
               {owned && (
                 <details>

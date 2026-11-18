@@ -1,6 +1,11 @@
 "use client";
 import Link from "next/link";
 import AllocationPanel from "./AllocationPanel";
+import PackingAllocationPanel from "./PackingAllocationPanel";
+import type {
+  PackingAllocationDraft,
+  PackingCandidate,
+} from "@/lib/fulfillment/packing-allocation";
 import type { AllocationDraft } from "@/lib/fulfillment/allocation";
 import type { User } from "firebase/auth";
 import { useEffect, useRef, useState } from "react";
@@ -13,6 +18,21 @@ import type {
 import styles from "../dry.module.css";
 
 const errors: Record<string, string> = {
+  allocationAlreadyReleased:
+    "This item's plan is already applied to packing. Reconcile existing work before changing it.",
+  allocationNotApproved: "Approve the allocation plan first.",
+  packingOrderNotFound:
+    "A linked order is missing or belongs to a different event.",
+  packingHouseholdMismatch:
+    "The order household does not match the approved plan. Review the identity link.",
+  packingItemMismatch:
+    "The item and unit must exactly match the approved allocation.",
+  packingWorkStarted:
+    "A linked order has started work, arrived or been held. No quantities were changed.",
+  packingLineAlreadyAllocated:
+    "An item line already has an allocation. Reconcile it before assigning another plan.",
+  packingCandidateLimit:
+    "This event exceeds the current 200-order linking limit. No orders were changed.",
   allocationOverStock:
     "Approved quantities exceed available stock. Reduce quantities or generate a new stock preview.",
   allocationReasonRequired:
@@ -81,6 +101,11 @@ function CoordinatorWorkspace({
   const [draft, setDraft] = useState<ImportDraft | null>(null);
   const [allocationDraft, setAllocationDraft] =
     useState<AllocationDraft | null>(null);
+  const [packingDraft, setPackingDraft] =
+    useState<PackingAllocationDraft | null>(null);
+  const [packingCandidates, setPackingCandidates] = useState<
+    PackingCandidate[] | null
+  >(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<CoordinatorCommand | null>(null);
@@ -158,7 +183,17 @@ function CoordinatorWorkspace({
         }
         return;
       }
-      if (body.allocationDraft) {
+      if (body.packingDraft) {
+        setPackingDraft(body.packingDraft);
+      } else if (body.packingApplied) {
+        setPackingDraft(null);
+        setPackingCandidates(null);
+        setMessage(
+          "Approved quantities applied to packing. Original requests and preparation stages preserved.",
+        );
+      } else if (body.allocationDraft) {
+        setPackingDraft(null);
+        setPackingCandidates(body.packingCandidates ?? null);
         setAllocationDraft(body.allocationDraft);
         if (command.action === "allocationApprove")
           setMessage("Allocation plan approved. Packing work is unchanged.");
@@ -440,8 +475,29 @@ function CoordinatorWorkspace({
             disabled={disabled}
             actorId={user.uid}
             send={send}
-            clear={() => setAllocationDraft(null)}
+            clear={() => {
+              setAllocationDraft(null);
+              setPackingDraft(null);
+              setPackingCandidates(null);
+            }}
           />
+          {allocationDraft?.approvedAt &&
+            allocationDraft.eventId === view.event.id && (
+              <PackingAllocationPanel
+                key={allocationDraft.id}
+                plan={allocationDraft}
+                candidates={packingCandidates}
+                draft={packingDraft}
+                disabled={disabled}
+                released={view.allocations.some(
+                  (p) =>
+                    p.itemId === allocationDraft.input.itemId &&
+                    !!p.packingPlanId,
+                )}
+                send={send}
+                clear={() => setPackingDraft(null)}
+              />
+            )}
           <section className={styles.panel}>
             <h2>Review mapped orders</h2>
             <p>

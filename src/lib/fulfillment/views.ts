@@ -1,3 +1,4 @@
+import { packingQuantity } from "./model";
 import type {
   FulfillmentOrder,
   Line,
@@ -18,7 +19,10 @@ export type DrySummary = {
 export type DryDetail = DrySummary & {
   notes: string;
   dietary: string | null;
-  lines: Line[];
+  lines: (Line & {
+    beforeAllocation: number;
+    allocationPlanId: string | null;
+  })[];
   resolutions: Record<string, Resolution>;
   packages: Package[];
 };
@@ -62,7 +66,12 @@ export function dryDetail(order: FulfillmentOrder): DryDetail {
     ...drySummary(order),
     notes: order.manifest.notes,
     dietary: order.manifest.dietary,
-    lines,
+    lines: lines.map((line) => ({
+      ...line,
+      quantity: packingQuantity(order, line),
+      beforeAllocation: line.quantity,
+      allocationPlanId: order.allocations?.[line.id]?.planId ?? null,
+    })),
     resolutions: Object.fromEntries(
       lines
         .filter((line) => Object.hasOwn(order.resolutions, line.id))

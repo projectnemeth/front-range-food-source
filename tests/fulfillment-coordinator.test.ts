@@ -621,3 +621,275 @@ test("allocation drafts honor event permissions, configuration versions, expiry 
   await rejects("forbidden", approveAllocation("revoked"));
   assert.equal((await event().collection("allocationItems").get()).size, 0);
 });
+
+async function setupPacking(available = 12) {
+  await store.execute("admin", setup);
+  await allocationPreview("packing-plan", { ...allocation, available });
+  // Use bag units to match the reviewed allocation exactly.
+  const records = allocation.households.map((h, i) => ({
+    ...input(),
+    householdLabel: h.label,
+    source: { ...input().source, key: `example-sheet/tab/packing-${i}` },
+    lines: input().lines.map((l) =>
+      l.id === "rice" ? { ...l, item: "Rice", unit: "bag" } : l,
+    ),
+  }));
+  const imported = await preview("packing-orders", records);
+  await apply("packing-orders");
+  const approved = (
+    await allocationPreview("packing-plan", { ...allocation, available })
+  ).proposed;
+  await approveAllocation("packing-plan", approved);
+  const links = imported.rows.map((r, i) => ({
+    householdKey: allocation.households[i].key,
+    orderId: r.manifest.id,
+    lineId: "rice",
+  }));
+  return { links, records };
+}
+async function packingPreview(
+  links: { householdKey: string; orderId: string; lineId: string }[],
+  operationId = "packing-preview",
+) {
+  const result = await store.execute("admin", {
+    action: "packingAllocationPreview",
+    eventId: manifest.eventId,
+    planId: "packing-plan",
+    operationId,
+    links,
+  });
+  assert.ok("packingDraft" in result && result.packingDraft);
+  return result.packingDraft;
+}
+const packingApply = (draftId = "packing-preview") =>
+  store.execute("admin", {
+    action: "packingAllocationApply",
+    eventId: manifest.eventId,
+    draftId,
+    confirmed: true,
+  });
+
+test("approved allocation connects atomically to packing targets, retaining source requests and timing", async () => {
+  const { links, records } = await setupPacking();
+  const draft = await packingPreview(links);
+  assert.deepEqual(
+    draft.rows.map((r) => r.quantity),
+    [4, 8],
+  );
+  const results = await Promise.all([packingApply(), packingApply()]);
+  assert.equal(results.filter((r) => "replayed" in r && !r.replayed).length, 1);
+  const first = (
+    await adminDb.doc(`fulfillmentOrders/${links[0].orderId}`).get()
+  ).data()!;
+  assert.equal(first.version, 1);
+  assert.equal(first.allocations.rice.quantity, 4);
+  assert.deepEqual(first.manifest.lines, records[0].lines);
+  assert.equal(first.portions.afterArrival.state, "waiting");
+  await event().update({ enabled: true, status: "OPEN" });
+  const fulfillment = new FulfillmentStore(adminDb);
+  const view = await fulfillment.readDry("admin", {
+    eventId: manifest.eventId,
+    orderId: links[0].orderId,
+  });
+  assert.equal(view.detail!.lines.find((l) => l.id === "rice")!.quantity, 4);
+  const execute = (
+    operationId: string,
+    expectedVersion: number,
+    command: unknown,
+  ) =>
+    fulfillment.execute(
+      "admin",
+      {
+        eventId: manifest.eventId,
+        orderId: links[0].orderId,
+        operationId,
+        expectedVersion,
+        command,
+      },
+      "dry",
+    );
+  await execute("claim-allocated", 1, { type: "claim", stage: "advanceDry" });
+  await rejects(
+    "excessQuantity",
+    execute("too-much", 2, {
+      type: "resolve",
+      lineId: "rice",
+      quantity: 5,
+      replacement: null,
+      reason: null,
+    }),
+  );
+  await execute("pick-allocated", 2, {
+    type: "resolve",
+    lineId: "rice",
+    quantity: 4,
+    replacement: null,
+    reason: null,
+  });
+  await rejects("allocationAlreadyReleased", packingPreview(links, "again"));
+  await allocationPreview("revision-after-release");
+  await rejects(
+    "allocationAlreadyReleased",
+    approveAllocation("revision-after-release"),
+  );
+});
+
+test("zero shares stay visible and source updates cannot erase applied allocations", async () => {
+  const { links, records } = await setupPacking(1);
+  await packingPreview(links);
+  await packingApply();
+  await event().update({ enabled: true, status: "OPEN" });
+  const fulfillment = new FulfillmentStore(adminDb);
+  const view = await fulfillment.readDry("admin", {
+    eventId: manifest.eventId,
+    orderId: links[0].orderId,
+  });
+  assert.equal(view.detail!.lines.find((l) => l.id === "rice")!.quantity, 0);
+  const change = await preview("changed-allocated", [
+    { ...records[0], notes: "Source changed" },
+  ]);
+  assert.equal(change.rows[0].status, "blocked");
+  await rejects("previewBlocked", apply("changed-allocated"));
+  const same = await preview("same-allocated", [records[0]]);
+  assert.equal(same.rows[0].status, "unchanged");
+  await apply("same-allocated");
+  assert.equal(
+    (await adminDb.doc(`fulfillmentOrders/${links[0].orderId}`).get()).data()!
+      .allocations.rice.quantity,
+    0,
+  );
+});
+
+test("packing link validation rejects incomplete, duplicated, cross-event and mismatched links", async () => {
+  const { links } = await setupPacking();
+  await rejects(
+    "allocationHouseholdsChanged",
+    packingPreview(links.slice(0, 1)),
+  );
+  await rejects(
+    "allocationHouseholdsChanged",
+    packingPreview([links[0], links[0]]),
+  );
+  await rejects(
+    "packingItemMismatch",
+    packingPreview([{ ...links[0], lineId: "diapers" }, links[1]]),
+  );
+  await rejects(
+    "packingHouseholdMismatch",
+    packingPreview([
+      { ...links[0], orderId: links[1].orderId },
+      { ...links[1], orderId: links[0].orderId },
+    ]),
+  );
+  await adminDb
+    .doc(`fulfillmentOrders/${links[0].orderId}`)
+    .update({ "manifest.eventId": "other" });
+  await rejects("packingOrderNotFound", packingPreview(links));
+});
+
+test("work or source changes after packing preview roll back every household", async () => {
+  const { links } = await setupPacking();
+  await packingPreview(links);
+  await event().update({ enabled: true, status: "OPEN" });
+  await new FulfillmentStore(adminDb).execute("admin", {
+    eventId: manifest.eventId,
+    orderId: links[1].orderId,
+    operationId: "claim-before-release",
+    expectedVersion: 0,
+    command: { type: "claim", stage: "advanceDry" },
+  });
+  await rejects("stalePreview", packingApply());
+  assert.equal(
+    (await adminDb.doc(`fulfillmentOrders/${links[0].orderId}`).get()).data()!
+      .allocations,
+    undefined,
+  );
+  assert.equal(
+    (await event().collection("allocationItems").doc("rice").get()).data()!
+      .packingPlanId,
+    undefined,
+  );
+  await rejects("packingWorkStarted", packingPreview(links, "after-claim"));
+});
+
+test("packing release rejects replaced plans, expired previews, revoked access and reuse with different links", async () => {
+  const { links } = await setupPacking();
+  await packingPreview(links);
+  await rejects("operationConflict", packingPreview([...links].reverse()));
+  await allocationPreview("new-plan");
+  await approveAllocation("new-plan");
+  await rejects("staleAllocation", packingApply());
+  await rejects("staleAllocation", packingPreview(links, "stale-plan"));
+  await event()
+    .collection("allocationItems")
+    .doc("rice")
+    .update({ draftId: "packing-plan", version: 1 }); // Restore fixture pointer only.
+  await packingPreview(links, "expires-packing");
+  now = "2026-11-07T17:00:00Z";
+  await rejects("draftExpired", packingApply("expires-packing"));
+  await event().collection("staff").doc("admin").update({ active: false });
+  await rejects("forbidden", packingApply());
+});
+
+test("household bindings persist across item plans and conflicting links cannot redirect allocations", async () => {
+  const { links, records } = await setupPacking();
+  await packingPreview(links);
+  await packingApply();
+  const secondInput = {
+    ...allocation,
+    itemId: "diapers",
+    item: "Diapers size 3",
+    unit: "pack",
+  };
+  await allocationPreview("diaper-plan", secondInput);
+  await approveAllocation("diaper-plan");
+  const duplicate = await preview("duplicate-household-order", [
+    {
+      ...records[0],
+      source: {
+        ...records[0].source,
+        key: "example-sheet/tab/other-registration",
+      },
+    },
+  ]);
+  await apply("duplicate-household-order");
+  const request = {
+    action: "packingAllocationPreview",
+    eventId: manifest.eventId,
+    planId: "diaper-plan",
+    operationId: "diaper-link",
+    links: links.map((link) => ({ ...link, lineId: "diapers" })),
+  };
+  await rejects(
+    "packingHouseholdMismatch",
+    store.execute("admin", {
+      ...request,
+      links: [
+        { ...request.links[0], orderId: duplicate.rows[0].manifest.id },
+        request.links[1],
+      ],
+    }),
+  );
+  const result = await store.execute("admin", request);
+  assert.ok("packingDraft" in result && result.packingDraft);
+  await packingApply(result.packingDraft.id);
+  const order = (
+    await adminDb.doc(`fulfillmentOrders/${links[0].orderId}`).get()
+  ).data()!;
+  assert.equal(order.allocations.rice.quantity, 4);
+  assert.equal(order.allocations.diapers.quantity, 4);
+  assert.equal(order.version, 2);
+});
+
+test("duplicate matching item lines block packing release instead of exceeding the approved share", async () => {
+  const { links } = await setupPacking();
+  const ref = adminDb.doc(`fulfillmentOrders/${links[0].orderId}`);
+  const order = (await ref.get()).data()!;
+  await ref.update({
+    "manifest.lines": [
+      ...order.manifest.lines,
+      { ...order.manifest.lines[0], id: "rice-copy" },
+    ],
+  });
+  await rejects("packingItemMismatch", packingPreview(links));
+});

@@ -206,6 +206,99 @@ test("coordinator prepares a disabled event, reviews an import and enables dry p
   expect((await orders.docs[0].ref.get()).data()!.manifest.notes).toBe(
     "Changed source",
   );
+  const allocatedRecords = ["Example A", "Example B"].map(
+    (householdLabel, i) => ({
+      ...manifest,
+      eventId,
+      householdLabel,
+      source: { ...manifest.source, key: `example-sheet/tab/allocated-${i}` },
+      lines: manifest.lines.map((line) =>
+        line.id === "rice" ? { ...line, unit: "1-pound bag" } : line,
+      ),
+    }),
+  );
+  await page
+    .getByLabel("Mapped order records", { exact: true })
+    .fill(JSON.stringify(allocatedRecords));
+  await page
+    .getByRole("button", { name: "Generate import preview", exact: true })
+    .click();
+  await expect(
+    page.getByText("Example A — new", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel(
+      "I reviewed the event, identities, quantities, instructions and preparation stages.",
+    )
+    .check();
+  await page
+    .getByRole("button", { name: "Apply reviewed import", exact: true })
+    .click();
+  await expect(page.getByRole("main").getByRole("status")).toContainText(
+    "2 new orders",
+  );
+  await page
+    .getByRole("button", { name: "View Rice plan", exact: true })
+    .click();
+  const linked = await adminDb
+    .collection("fulfillmentOrders")
+    .where("manifest.eventId", "==", eventId)
+    .get();
+  for (const label of ["Example A", "Example B"]) {
+    const record = linked.docs.find(
+      (doc) => doc.data().manifest.householdLabel === label,
+    )!;
+    await page
+      .getByLabel(`Packing order for ${label}`, { exact: true })
+      .selectOption(record.id);
+    await page
+      .getByLabel(`Packing item for ${label}`, { exact: true })
+      .selectOption("rice");
+  }
+  await page
+    .getByRole("button", { name: "Review packing quantities", exact: true })
+    .click();
+  await expect(
+    page.getByText("Example A: 2 → 3 1-pound bag", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel(
+      "I verified all household links, items, units, zero allocations and preparation stages.",
+    )
+    .check();
+  await page.screenshot({
+    path: test.info().outputPath("packing-allocation-review.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: test.info().outputPath("packing-allocation-mobile.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page
+    .getByRole("button", {
+      name: "Apply approved packing quantities",
+      exact: true,
+    })
+    .click();
+  await expect(page.getByRole("main").getByRole("status")).toContainText(
+    "Approved quantities applied to packing",
+  );
+  const allocatedOrder = linked.docs.find(
+    (doc) => doc.data().manifest.householdLabel === "Example A",
+  )!;
+  expect(
+    (await allocatedOrder.ref.get()).data()!.allocations.rice.quantity,
+  ).toBe(3);
+  expect(
+    (await allocatedOrder.ref.get()).data()!.manifest.lines[0].quantity,
+  ).toBe(2);
   await page
     .getByLabel("I intend to enable packing for this Phase Two event.")
     .check();
@@ -222,4 +315,18 @@ test("coordinator prepares a disabled event, reviews an import and enables dry p
   await expect(
     page.getByRole("button", { name: "Claim dry portion" }),
   ).toBeEnabled();
+  await page.getByRole("button", { name: /Example A/ }).click();
+  await expect(
+    page.getByText("3 1-pound bag · Pantry 01", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Claim dry portion", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Picked Rice", exact: true }).click();
+  await expect(
+    page.getByText("3 packed · picked", { exact: true }),
+  ).toBeVisible();
+  expect(
+    (await allocatedOrder.ref.get()).data()!.portions.afterArrival.state,
+  ).toBe("waiting");
 });

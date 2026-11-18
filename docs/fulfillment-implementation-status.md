@@ -1,6 +1,10 @@
 # Phase Two fulfillment implementation status
 
-Updated November 18, 2026. Eighth development slice: coordinator-reviewed allocation planning. Google metadata, headers, and a small selection of noncontact request cells were inspected read-only. No live import, deployment, or pilot integration occurred.
+Updated November 18, 2026. Ninth development slice: approved allocations connected to packing quantities. Google metadata, headers, and a small selection of noncontact request cells were inspected read-only. No live import, deployment, or pilot integration occurred.
+
+## Latest packing-quantity milestone
+
+Approved allocations can now be linked to existing orders through a server-owned preview and atomic apply. Every household must be linked; stable bindings persist across item plans. Effective targets are shown and enforced in dry picking without modifying original manifests or perishable timing. Zero allocations remain visible and require confirmation. Stale plans, source changes, existing work and competing claims block apply. Applied item plans are locked against replacement pending reconciliation. See [workflow and limits](fulfillment-packing-allocations.md).
 
 ## Latest allocation milestone
 
@@ -51,7 +55,7 @@ Live source import/reconciliation, changes to orders with existing work, standar
 
 The arrival operation consumes already validated logical arrivals in memory. No bridge credentials, outbox, retry service, printing changes, or Google-to-Firebase integration exist yet. These require the failure and authorization checks in the [implementation plan](fulfillment-implementation-plan.md).
 
-Next development slice: connect reviewed source requests and approved allocation plan versions to manifest previews, then build source reconciliation, including explicit handling of changed/deleted orders before a dry-preparation pilot. The current incremental preview never infers deletions or automatically holds existing orders; a blocked changed record requires coordinator resolution and is not an applied update. Keep all new functionality inactive for existing events. The check-in pilot remains independent until a separately tested and explicitly coordinated cutover.
+Next development slice: build source/allocation reconciliation for applied plans and physical work, including explicit handling of changed/deleted orders before a dry-preparation pilot. The current incremental preview never infers deletions or automatically holds existing orders; a blocked changed record requires coordinator resolution and is not an applied update. Keep all new functionality inactive for existing events. The check-in pilot remains independent until a separately tested and explicitly coordinated cutover.
 
 ## Verification
 
@@ -77,3 +81,7 @@ All 35 unit tests pass, including nine new cases for the actual header layout, e
 ### November 18 allocation-planner verification
 
 All 39 unit tests and 36 emulator tests passed. All eight browser tests passed with fresh isolated emulators, including existing registration and print routes. The final household-entry UI was additionally rehearsed in the coordinator browser test. Lint, standard TypeScript checking and the optimized build passed; dependency-sensitive checks used the isolated exact-lockfile copy. The initial combined integration/browser run encountered an emulator test-account email collision; separate fresh browser emulators resolved it without changes to production or pilot code. Desktop/mobile allocation screens were visually inspected. No production deployment or source write occurred.
+
+### November 18 allocation-to-packing verification
+
+All 41 unit tests passed. The full 41-case emulator suite passed, then the two additional household-binding/duplicate-item guard cases passed separately (43 emulator cases total). All eight browser tests passed after correcting explicit labels for the new linking selectors; the coordinator rehearsal includes applying the plan and picking its target quantity, plus mobile width checks. Standard TypeScript, lint and optimized build checks passed in the isolated dependency copy. The mobile linking preview was visually inspected. Pilot files, existing registration/order endpoints, Firebase rules and deployed settings were unchanged. No live import, Google write, push or deployment occurred.

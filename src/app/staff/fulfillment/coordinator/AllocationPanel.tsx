@@ -38,9 +38,9 @@ export default function AllocationPanel({
         quantity.
       </p>
       <p>
-        Approval saves a planning record. It does not reserve inventory, create
-        packing orders, or change existing work. A new approved plan replaces
-        the previous plan for the same item key.
+        Approval saves a planning record. Use the separate packing review below
+        to apply quantities to unstarted orders. Stock is not reserved. Once
+        applied to packing, this item’s plan is locked for reconciliation.
       </p>
       <form
         className={styles.form}

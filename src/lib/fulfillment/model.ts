@@ -78,7 +78,17 @@ export type Package = {
   custody: string | null;
   handedOver: boolean;
 };
+export type PackingAllocation = {
+  planId: string;
+  itemId: string;
+  householdKey: string;
+  quantity: number;
+  approvedBy: string;
+  appliedBy: string;
+  appliedAt: string;
+};
 export type FulfillmentOrder = {
+  allocations?: Record<string, PackingAllocation>;
   manifest: Manifest;
   version: number;
   control: "active" | "held" | "cancelled" | "departed";
@@ -89,6 +99,12 @@ export type FulfillmentOrder = {
   packages: Package[];
   deliveredAt: string | null;
 };
+
+export function packingQuantity(order: FulfillmentOrder, line: Line): number {
+  return order.allocations && Object.hasOwn(order.allocations, line.id)
+    ? order.allocations[line.id].quantity
+    : line.quantity;
+}
 
 export function createFulfillmentOrder(input: unknown): FulfillmentOrder {
   const manifest = manifestSchema.parse(input);

@@ -1,3 +1,4 @@
+import { packingPreviewSchema, packingApplySchema } from "./packing-allocation";
 import { z } from "zod";
 import {
   allocationPreviewSchema,
@@ -10,6 +11,8 @@ import { manifestSchema, type Manifest } from "./model";
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,160}$/);
 const text = z.string().trim().min(1).max(120);
 export const coordinatorCommandSchema = z.discriminatedUnion("action", [
+  packingPreviewSchema,
+  packingApplySchema,
   allocationPreviewSchema,
   allocationApproveSchema,
   allocationReadSchema,
