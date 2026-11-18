@@ -39,6 +39,7 @@ export const sourcePreflightSchema = z
                 role,
                 // Required even for ignored fields so omissions are deliberate and reviewable.
                 reason: z.string().trim().min(1).max(1000),
+                allowDuplicateHeader: z.boolean().optional(),
               })
               .strict(),
           )
@@ -80,7 +81,19 @@ export function inspectSourceHeaders(input: unknown) {
   const seen = new Set<string>();
   headers.forEach((header, index) => {
     if (!header) return;
-    if (seen.has(header))
+    if (
+      seen.has(header) &&
+      !headers.every(
+        (value, position) =>
+          value !== header ||
+          mapping.columns.some(
+            (c) =>
+              c.index === position &&
+              c.header === header &&
+              c.allowDuplicateHeader === true,
+          ),
+      )
+    )
       issue(
         "duplicateHeader",
         "A header is repeated after trimming whitespace.",

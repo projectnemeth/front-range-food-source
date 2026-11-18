@@ -1,10 +1,10 @@
 # Phase Two fulfillment implementation status
 
-Updated November 17, 2026. Sixth development slice: read-only source discovery and a local source-layout preflight. No deployment, household response-row access, or pilot integration occurred. Google metadata and headers were inspected read-only.
+Updated November 18, 2026. Seventh development slice: verified source layout and a bounded response-review adapter. Google metadata, headers, and a small selection of noncontact request cells were inspected read-only. No live import, deployment, or pilot integration occurred.
 
 ## Latest source-discovery milestone
 
-The user confirmed itemized orders come from Google Form Responses. Neither the check-in workbook nor the accessible response-file copy has food-selection headers; the exact operational form/response URL is still needed. A local `fulfillment:preflight` command now checks complete header snapshots against explicit mappings, reports drift and unmapped columns, and never declares an import ready. It has no database or Google write path and is not wired into the manually normalized manifest importer. See [source findings, usage and remaining mapping work](fulfillment-source-mapping.md).
+The user supplied the itemized Google Form response workbook. Its real header layout and bounded request samples now ground a positional response-review adapter, with a local `fulfillment:review-source` command. It preserves whole cells (including commas within choice labels), dietary and infant details, and both earlier/later household fields. Fresh/refrigerated and frozen categories remain after-arrival. Header drift blocks extraction; ambiguous identities and unknown fields remain flagged. This produces review records, not pickable manifests. User-confirmed first/third-Saturday windows now produce candidate pickup dates from Column A, with boundary-time and exception review retained. Quantities depend on household size and current stock; exact per-item allocations, shelf rules and cross-workbook check-in linkage still require review. See [source findings and usage](fulfillment-source-mapping.md).
 
 ## Latest reconciliation milestone
 
@@ -47,7 +47,7 @@ Live source import/reconciliation, changes to orders with existing work, standar
 
 The arrival operation consumes already validated logical arrivals in memory. No bridge credentials, outbox, retry service, printing changes, or Google-to-Firebase integration exist yet. These require the failure and authorization checks in the [implementation plan](fulfillment-implementation-plan.md).
 
-Next development slice: verify the complete real-source field mapping and build source reconciliation, including explicit handling of changed/deleted orders before a dry-preparation pilot. The current incremental preview never infers deletions or automatically holds existing orders; a blocked changed record requires coordinator resolution and is not an applied update. Keep all new functionality inactive for existing events. The check-in pilot remains independent until a separately tested and explicitly coordinated cutover.
+Next development slice: establish event selection and approved allocations from the verified response source, then build source reconciliation, including explicit handling of changed/deleted orders before a dry-preparation pilot. The current incremental preview never infers deletions or automatically holds existing orders; a blocked changed record requires coordinator resolution and is not an applied update. Keep all new functionality inactive for existing events. The check-in pilot remains independent until a separately tested and explicitly coordinated cutover.
 
 ## Verification
 
@@ -65,3 +65,7 @@ The original workspace still has duplicated generated/type files and an incomple
 The source-layout utility and CLI have seven regression cases covering matching layouts, missing requests/timestamps, drift, duplicates, wrong tabs, blank trailing cells, invalid inputs, and CLI exit codes. Existing fulfillment and core unit tests run alongside these. No application route, API, Firebase rule, pilot file, or runtime configuration was modified for this slice.
 
 Validation for this slice: all 26 unit tests passed (19 existing plus 7 source-preflight cases), ESLint passed with zero warnings, and standard TypeScript checking passed in a temporary copy installed from the exact lockfile. The root workspace still fails typechecking on the pre-existing duplicate `node 2` types. No browser or emulator rerun was needed for this isolated CLI/library addition; earlier integration results above are historical.
+
+### November 18 response-review verification
+
+All 35 unit tests pass, including nine new cases for the actual header layout, explicitly acknowledged duplicates, lossless request-cell preservation, contact-column exclusion, ambiguous identities, layout drift, bounded CLI behavior and calendar routing across month/year boundaries. ESLint passes with zero warnings; standard TypeScript checking passes in the isolated exact-lockfile dependency copy. No application route, database operation or label-pilot file changed, so emulator/browser suites were not rerun for this library/CLI slice. Live importing remains unimplemented.
