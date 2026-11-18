@@ -1,6 +1,10 @@
 # Phase Two fulfillment implementation status
 
-Updated November 18, 2026. Seventh development slice: verified source layout and a bounded response-review adapter. Google metadata, headers, and a small selection of noncontact request cells were inspected read-only. No live import, deployment, or pilot integration occurred.
+Updated November 18, 2026. Eighth development slice: coordinator-reviewed allocation planning. Google metadata, headers, and a small selection of noncontact request cells were inspected read-only. No live import, deployment, or pilot integration occurred.
+
+## Latest allocation milestone
+
+The gated coordinator workspace now proposes whole-unit quantities proportional to household size and entered available stock. It shows zero allocations, allows reasoned adjustments, and rejects totals above stock. Approval saves an immutable reviewed plan with audit history; item-level versions reject competing stale previews. Current plans can be reopened. The planner does not reserve inventory, generate manifests, alter physical work, or enable events. See [allocation workflow, policy and limits](fulfillment-allocation-planner.md).
 
 ## Latest source-discovery milestone
 
@@ -47,7 +51,7 @@ Live source import/reconciliation, changes to orders with existing work, standar
 
 The arrival operation consumes already validated logical arrivals in memory. No bridge credentials, outbox, retry service, printing changes, or Google-to-Firebase integration exist yet. These require the failure and authorization checks in the [implementation plan](fulfillment-implementation-plan.md).
 
-Next development slice: establish event selection and approved allocations from the verified response source, then build source reconciliation, including explicit handling of changed/deleted orders before a dry-preparation pilot. The current incremental preview never infers deletions or automatically holds existing orders; a blocked changed record requires coordinator resolution and is not an applied update. Keep all new functionality inactive for existing events. The check-in pilot remains independent until a separately tested and explicitly coordinated cutover.
+Next development slice: connect reviewed source requests and approved allocation plan versions to manifest previews, then build source reconciliation, including explicit handling of changed/deleted orders before a dry-preparation pilot. The current incremental preview never infers deletions or automatically holds existing orders; a blocked changed record requires coordinator resolution and is not an applied update. Keep all new functionality inactive for existing events. The check-in pilot remains independent until a separately tested and explicitly coordinated cutover.
 
 ## Verification
 
@@ -69,3 +73,7 @@ Validation for this slice: all 26 unit tests passed (19 existing plus 7 source-p
 ### November 18 response-review verification
 
 All 35 unit tests pass, including nine new cases for the actual header layout, explicitly acknowledged duplicates, lossless request-cell preservation, contact-column exclusion, ambiguous identities, layout drift, bounded CLI behavior and calendar routing across month/year boundaries. ESLint passes with zero warnings; standard TypeScript checking passes in the isolated exact-lockfile dependency copy. No application route, database operation or label-pilot file changed, so emulator/browser suites were not rerun for this library/CLI slice. Live importing remains unimplemented.
+
+### November 18 allocation-planner verification
+
+All 39 unit tests and 36 emulator tests passed. All eight browser tests passed with fresh isolated emulators, including existing registration and print routes. The final household-entry UI was additionally rehearsed in the coordinator browser test. Lint, standard TypeScript checking and the optimized build passed; dependency-sensitive checks used the isolated exact-lockfile copy. The initial combined integration/browser run encountered an emulator test-account email collision; separate fresh browser emulators resolved it without changes to production or pilot code. Desktop/mobile allocation screens were visually inspected. No production deployment or source write occurred.

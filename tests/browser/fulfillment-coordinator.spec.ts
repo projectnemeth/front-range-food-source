@@ -53,6 +53,86 @@ test("coordinator prepares a disabled event, reviews an import and enables dry p
   await expect(
     page.getByText("Table B04: 0/3 packages · active"),
   ).toBeVisible();
+  await page.getByLabel("Allocation item key", { exact: true }).fill("rice");
+  await page.getByLabel("Item name", { exact: true }).fill("Rice");
+  await page
+    .getByLabel("Unit or package size", { exact: true })
+    .fill("1-pound bag");
+  await page.getByLabel("Available units", { exact: true }).fill("12");
+  await page.getByLabel("Registration reference 1", { exact: true }).fill("a");
+  await page.getByLabel("Household name 1", { exact: true }).fill("Example A");
+  await page.getByLabel("Household size 1", { exact: true }).fill("2");
+  await page
+    .getByRole("button", { name: "Add household", exact: true })
+    .click();
+  await page.getByLabel("Registration reference 2", { exact: true }).fill("b");
+  await page.getByLabel("Household name 2", { exact: true }).fill("Example B");
+  await page.getByLabel("Household size 2", { exact: true }).fill("4");
+  await page
+    .getByLabel(
+      "I verified the complete eligible list, household sizes, item identity and stock for this event.",
+    )
+    .check();
+  await page
+    .getByRole("button", { name: "Propose quantities", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Quantity for Example A", { exact: true }),
+  ).toHaveValue("4");
+  await expect(
+    page.getByLabel("Quantity for Example B", { exact: true }),
+  ).toHaveValue("8");
+  await page.getByLabel("Quantity for Example A", { exact: true }).fill("3");
+  await page
+    .getByLabel(
+      "I reviewed all quantities, including zero allocations, and rechecked available stock.",
+    )
+    .check();
+  await page
+    .getByRole("button", { name: "Approve allocation plan", exact: true })
+    .click();
+  await expect(page.getByRole("main").getByRole("status")).toContainText(
+    "Record a reason",
+  );
+  await page
+    .getByLabel("Reason for changing Example A", { exact: true })
+    .fill("Reserve one bag");
+  await page
+    .getByRole("button", { name: "Approve allocation plan", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Rice allocation — approved",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Approved total: 11 · unallocated: 1 1-pound bag", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(
+    (
+      await adminDb
+        .doc(`fulfillmentEvents/${eventId}/allocationItems/rice`)
+        .get()
+    ).data()!.allocated,
+  ).toBe(11);
+  await page.screenshot({
+    path: test.info().outputPath("allocation-review.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: test.info().outputPath("allocation-mobile.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1280, height: 720 });
   const records = [{ ...manifest, eventId }];
   await page
     .getByLabel("Mapped order records", { exact: true })

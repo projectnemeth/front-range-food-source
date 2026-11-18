@@ -470,3 +470,154 @@ test("a conflicting source reservation cannot replace another order", async () =
   await rejects("previewBlocked", apply("bad-pointer"));
   assert.equal((await ref.get()).data()!.manifest.eventId, "other-event");
 });
+
+const allocation = {
+  itemId: "rice",
+  item: "Rice",
+  unit: "bag",
+  available: 12,
+  eligibilityConfirmed: true,
+  households: [
+    { key: "a", label: "Example A", size: 2 },
+    { key: "b", label: "Example B", size: 4 },
+  ],
+};
+async function allocationPreview(
+  operationId = "allocation",
+  input = allocation,
+) {
+  const result = await store.execute("admin", {
+    action: "allocationPreview",
+    eventId: manifest.eventId,
+    operationId,
+    input,
+  });
+  assert.ok("allocationDraft" in result);
+  return result.allocationDraft;
+}
+const approveAllocation = (
+  draftId = "allocation",
+  quantities = [
+    { key: "a", quantity: 4, reason: "" },
+    { key: "b", quantity: 8, reason: "" },
+  ],
+) =>
+  store.execute("admin", {
+    action: "allocationApprove",
+    eventId: manifest.eventId,
+    draftId,
+    quantities,
+    confirmed: true,
+  });
+
+test("allocation approval is audited, retry-safe, readable and cannot create packing work", async () => {
+  await store.execute("admin", setup);
+  const draft = await allocationPreview();
+  assert.deepEqual(
+    draft.proposed.map((q) => q.quantity),
+    [4, 8],
+  );
+  assert.equal((await event().collection("allocationItems").get()).size, 0);
+  const results = await Promise.all([approveAllocation(), approveAllocation()]);
+  assert.equal(results.filter((r) => "replayed" in r && !r.replayed).length, 1);
+  assert.equal((await adminDb.collection("fulfillmentOrders").get()).size, 0);
+  assert.equal((await event().get()).data()!.enabled, false);
+  const view = await store.read("admin", { eventId: manifest.eventId });
+  assert.equal(view.allocations[0].allocated, 12);
+  assert.equal(view.allocations[0].version, 1);
+  const read = await store.execute("admin", {
+    action: "allocationRead",
+    eventId: manifest.eventId,
+    draftId: draft.id,
+  });
+  assert.ok("allocationDraft" in read && read.allocationDraft.approvedAt);
+  assert.equal(
+    (
+      await event().collection("activity").doc("allocation-allocation").get()
+    ).data()!.actor,
+    "admin",
+  );
+  await rejects(
+    "operationConflict",
+    approveAllocation("allocation", [
+      { key: "a", quantity: 3, reason: "Changed" },
+      { key: "b", quantity: 8, reason: "" },
+    ]),
+  );
+});
+
+test("allocation approval rejects overstock, missing reasons, changed households and stale item plans", async () => {
+  await store.execute("admin", setup);
+  await allocationPreview();
+  await allocationPreview("competing");
+  await rejects(
+    "allocationOverStock",
+    approveAllocation("allocation", [
+      { key: "a", quantity: 5, reason: "Extra" },
+      { key: "b", quantity: 8, reason: "" },
+    ]),
+  );
+  await rejects(
+    "allocationReasonRequired",
+    approveAllocation("allocation", [
+      { key: "a", quantity: 3, reason: "" },
+      { key: "b", quantity: 8, reason: "" },
+    ]),
+  );
+  await rejects(
+    "allocationHouseholdsChanged",
+    approveAllocation("allocation", [{ key: "a", quantity: 4, reason: "" }]),
+  );
+  await approveAllocation("allocation", [
+    { key: "a", quantity: 3, reason: "Reserve one" },
+    { key: "b", quantity: 8, reason: "" },
+  ]);
+  await rejects("staleAllocation", approveAllocation("competing"));
+  await allocationPreview("replacement", { ...allocation, available: 6 });
+  await approveAllocation("replacement", [
+    { key: "a", quantity: 2, reason: "" },
+    { key: "b", quantity: 4, reason: "" },
+  ]);
+  assert.equal(
+    (await event().collection("allocationItems").doc("rice").get()).data()!
+      .version,
+    2,
+  );
+  assert.equal(
+    (
+      await event().collection("allocationDrafts").doc("allocation").get()
+    ).data()!.approved[0].quantity,
+    3,
+  );
+});
+
+test("allocation drafts honor event permissions, configuration versions, expiry and revocation", async () => {
+  await store.execute("admin", setup);
+  await allocationPreview();
+  await rejects(
+    "forbidden",
+    store.execute("packer", {
+      action: "allocationRead",
+      eventId: manifest.eventId,
+      draftId: "allocation",
+    }),
+  );
+  await rejects(
+    "forbidden",
+    store.execute("packer", {
+      action: "allocationPreview",
+      eventId: manifest.eventId,
+      operationId: "attack",
+      input: allocation,
+    }),
+  );
+  await event().update({ version: 1 });
+  await rejects("stalePreview", approveAllocation());
+  await allocationPreview("expiry");
+  now = "2026-11-07T17:00:00Z";
+  await rejects("draftExpired", approveAllocation("expiry"));
+  await allocationPreview("revoked");
+  await event().collection("staff").doc("admin").update({ active: false });
+  await rejects("forbidden", approveAllocation("revoked"));
+  assert.equal((await event().collection("allocationItems").get()).size, 0);
+});

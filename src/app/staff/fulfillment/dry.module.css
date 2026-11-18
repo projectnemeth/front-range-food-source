@@ -60,7 +60,8 @@
 }
 .shell button:focus-visible,
 .shell input:focus-visible,
-.shell select:focus-visible {
+.shell select:focus-visible,
+.shell textarea:focus-visible {
   outline: 3px solid #c27a18;
   outline-offset: 3px;
 }
@@ -69,7 +70,8 @@
   gap: 0.4rem;
 }
 .shell input,
-.shell select {
+.shell select,
+.shell textarea {
   padding: 0.7rem;
   border: 1px solid #789084;
   border-radius: 5px;
@@ -134,4 +136,8 @@
   .panel {
     padding: 1rem;
   }
+}
+
+.shell fieldset {
+  min-width: 0;
 }

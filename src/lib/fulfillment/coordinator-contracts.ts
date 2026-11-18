@@ -1,9 +1,18 @@
 import { z } from "zod";
+import {
+  allocationPreviewSchema,
+  allocationApproveSchema,
+  allocationReadSchema,
+  type AllocationSummary,
+} from "./allocation";
 import { validDate } from "../dates";
 import { manifestSchema, type Manifest } from "./model";
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,160}$/);
 const text = z.string().trim().min(1).max(120);
 export const coordinatorCommandSchema = z.discriminatedUnion("action", [
+  allocationPreviewSchema,
+  allocationApproveSchema,
+  allocationReadSchema,
   z
     .object({
       action: z.literal("createEvent"),
@@ -96,6 +105,7 @@ export type ImportDraft = {
   rows: ImportRow[];
 };
 export type CoordinatorView = {
+  allocations: AllocationSummary[];
   event: EventConfig;
   staff: { uid: string; role: string; active: boolean }[];
   locations: {

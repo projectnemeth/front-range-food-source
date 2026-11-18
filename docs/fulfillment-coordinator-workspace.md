@@ -16,6 +16,10 @@ The coordinator can then:
 
 Event coordinators may access setup while packing is disabled. Packers and runners cannot access setup or import records. The existing check-in pilot has no knowledge of these new events.
 
+## Allocate available stock
+
+The coordinator can now propose and approve an event-specific allocation plan for each item, using the complete eligible household list, household sizes, and available whole units. The proposal is proportional; changes require reasons, over-allocation is rejected, and replaced plans retain their history. This planning step does not reserve stock or create packing orders. See [allocation workflow and limits](fulfillment-allocation-planner.md).
+
 ## Preview and apply mapped records
 
 This milestone accepts a JSON array of already mapped order manifests. It is **not a live Google Sheet adapter or a raw CSV importer**. Complete food-column mapping, approved allocations, duplicate-response review, and source provenance still need to be established before preparing real records. See the entirely fictional [example input](fulfillment-import-example.json).

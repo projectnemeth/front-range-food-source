@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+import AllocationPanel from "./AllocationPanel";
+import type { AllocationDraft } from "@/lib/fulfillment/allocation";
 import type { User } from "firebase/auth";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -11,6 +13,14 @@ import type {
 import styles from "../dry.module.css";
 
 const errors: Record<string, string> = {
+  allocationOverStock:
+    "Approved quantities exceed available stock. Reduce quantities or generate a new stock preview.",
+  allocationReasonRequired:
+    "Record a reason for each quantity changed from the proposal.",
+  allocationHouseholdsChanged:
+    "The reviewed household list changed. Generate a new preview.",
+  staleAllocation:
+    "Another plan for this item was approved. Reload and generate a new preview.",
   forbidden:
     "Coordinator access is required. Only an existing application administrator can create an event.",
   staleVersion:
@@ -69,6 +79,8 @@ function CoordinatorWorkspace({
   const [eventId, setEventId] = useState("");
   const [view, setView] = useState<CoordinatorView | null>(null);
   const [draft, setDraft] = useState<ImportDraft | null>(null);
+  const [allocationDraft, setAllocationDraft] =
+    useState<AllocationDraft | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<CoordinatorCommand | null>(null);
@@ -98,6 +110,7 @@ function CoordinatorWorkspace({
       setView(null);
       throw new Error(body.error);
     }
+    setAllocationDraft((current) => (current?.eventId === id ? current : null));
     setView(body);
     setEventId(id);
   };
@@ -126,7 +139,11 @@ function CoordinatorWorkspace({
         const fields = Array.isArray(body.fields)
           ? body.fields
               .slice(0, 5)
-              .map((field: { path?: string[] }) => field.path?.join("."))
+              .map((field: { path?: string | string[] }) =>
+                typeof field.path === "string"
+                  ? field.path
+                  : field.path?.join("."),
+              )
               .filter(Boolean)
               .join(", ")
           : "";
@@ -137,11 +154,17 @@ function CoordinatorWorkspace({
         if (response.status === 401 || response.status === 403) {
           setView(null);
           setDraft(null);
+          setAllocationDraft(null);
         }
         return;
       }
-      if (body.draft) setDraft(body.draft);
+      if (body.allocationDraft) {
+        setAllocationDraft(body.allocationDraft);
+        if (command.action === "allocationApprove")
+          setMessage("Allocation plan approved. Packing work is unchanged.");
+      } else if (body.draft) setDraft(body.draft);
       else {
+        setAllocationDraft(null);
         setDraft(null);
         setMessage(
           command.action === "apply"
@@ -410,6 +433,15 @@ function CoordinatorWorkspace({
               </form>
             </section>
           </div>
+          <AllocationPanel
+            key={view.event.id}
+            view={view}
+            draft={allocationDraft}
+            disabled={disabled}
+            actorId={user.uid}
+            send={send}
+            clear={() => setAllocationDraft(null)}
+          />
           <section className={styles.panel}>
             <h2>Review mapped orders</h2>
             <p>

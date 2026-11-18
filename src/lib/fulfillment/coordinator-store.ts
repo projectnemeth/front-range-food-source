@@ -1,3 +1,9 @@
+import {
+  proposeAllocation,
+  validateAllocation,
+  type AllocationDraft,
+  type AllocationSummary,
+} from "./allocation";
 import type { Firestore, Transaction } from "firebase-admin/firestore";
 import {
   coordinatorCommandSchema,
@@ -58,7 +64,14 @@ export class CoordinatorStore {
         this.event(eventId).collection("locations").limit(201),
       );
       check(staff.size <= 200 && locations.size <= 200, "setupLimitExceeded");
+      const allocations = await tx.get(
+        this.event(eventId).collection("allocationItems").limit(201),
+      );
+      check(allocations.size <= 200, "setupLimitExceeded");
       return {
+        allocations: allocations.docs.map(
+          (doc) => doc.data() as AllocationSummary,
+        ),
         event: {
           id: eventId,
           label: event.label,
@@ -87,6 +100,12 @@ export class CoordinatorStore {
     const command = coordinatorCommandSchema.parse(input);
     if (command.action === "preview") return this.preview(uid, command);
     if (command.action === "apply") return this.apply(uid, command);
+    if (
+      command.action === "allocationPreview" ||
+      command.action === "allocationApprove" ||
+      command.action === "allocationRead"
+    )
+      return this.allocation(uid, command);
     const event = this.event(command.eventId);
     const receipt = event
       .collection("setupOperations")
@@ -191,6 +210,107 @@ export class CoordinatorStore {
         { actor: uid, at: now, command },
       );
       return { eventId: command.eventId, replayed: false };
+    });
+  }
+
+  private async allocation(
+    uid: string,
+    command: Extract<
+      CoordinatorCommand,
+      { action: "allocationPreview" | "allocationApprove" | "allocationRead" }
+    >,
+  ) {
+    const event = this.event(command.eventId);
+    const draftRef = event
+      .collection("allocationDrafts")
+      .doc(
+        command.action === "allocationPreview"
+          ? command.operationId
+          : command.draftId,
+      );
+    const now = this.clock();
+    return this.db.runTransaction(async (tx) => {
+      const config = await this.coordinator(tx, command.eventId, uid);
+      const snapshot = await tx.get(draftRef);
+      if (command.action === "allocationRead") {
+        check(snapshot.exists, "draftNotFound");
+        return { allocationDraft: snapshot.data() as AllocationDraft };
+      }
+      const fingerprint = fulfillmentKey(command);
+      if (command.action === "allocationPreview") {
+        if (snapshot.exists) {
+          check(
+            snapshot.data()!.actor === uid &&
+              snapshot.data()!.fingerprint === fingerprint,
+            "operationConflict",
+          );
+          return { allocationDraft: snapshot.data() as AllocationDraft };
+        }
+        const item = await tx.get(
+          event.collection("allocationItems").doc(command.input.itemId),
+        );
+        const draft: AllocationDraft = {
+          id: draftRef.id,
+          eventId: command.eventId,
+          actor: uid,
+          eventVersion: config.version,
+          itemVersion: item.data()?.version ?? 0,
+          fingerprint,
+          createdAt: now,
+          expiresAt: new Date(Date.parse(now) + 30 * 60 * 1000).toISOString(),
+          approvedAt: null,
+          input: command.input,
+          proposed: proposeAllocation(command.input),
+        };
+        tx.create(draftRef, draft);
+        return { allocationDraft: draft };
+      }
+      check(snapshot.exists && snapshot.data()!.actor === uid, "draftNotFound");
+      const draft = snapshot.data() as AllocationDraft;
+      if (draft.approvedAt) {
+        check(draft.approvalFingerprint === fingerprint, "operationConflict");
+        return { allocationDraft: draft, replayed: true };
+      }
+      check(Date.parse(draft.expiresAt) > Date.parse(now), "draftExpired");
+      check(draft.eventVersion === config.version, "stalePreview");
+      const itemRef = event
+        .collection("allocationItems")
+        .doc(draft.input.itemId);
+      const [item, items] = await Promise.all([
+        tx.get(itemRef),
+        tx.get(event.collection("allocationItems").limit(201)),
+      ]);
+      check(
+        (item.data()?.version ?? 0) === draft.itemVersion,
+        "staleAllocation",
+      );
+      check(item.exists || items.size < 200, "setupLimitExceeded");
+      const allocated = validateAllocation(draft, command.quantities);
+      const approved = {
+        ...draft,
+        approved: command.quantities,
+        approvedAt: now,
+        approvalFingerprint: fingerprint,
+      };
+      tx.set(draftRef, approved);
+      tx.set(itemRef, {
+        itemId: draft.input.itemId,
+        item: draft.input.item,
+        unit: draft.input.unit,
+        available: draft.input.available,
+        allocated,
+        version: draft.itemVersion + 1,
+        draftId: draft.id,
+      });
+      tx.create(event.collection("activity").doc(`allocation-${draft.id}`), {
+        type: "allocationApproved",
+        actor: uid,
+        at: now,
+        draftId: draft.id,
+        itemId: draft.input.itemId,
+        previousDraftId: item.data()?.draftId ?? null,
+      });
+      return { allocationDraft: approved, replayed: false };
     });
   }
 
