@@ -51,6 +51,9 @@ export const manifestSchema = z
       new Set(input.lines.map((line) => line.id)).size === input.lines.length,
     "Line IDs must be unique",
   );
+export const reconciledManifestSchema = manifestSchema.safeExtend({
+  lines: z.array(lineSchema).max(200),
+});
 export type Manifest = z.infer<typeof manifestSchema>;
 export type Line = Manifest["lines"][number];
 export type Resolution = {
@@ -89,6 +92,8 @@ export type PackingAllocation = {
   appliedAt: string;
 };
 export type FulfillmentOrder = {
+  lastReconciliationId?: string;
+  allocationHouseholdKey?: string;
   reconciliationId?: string;
   allocations?: Record<string, PackingAllocation>;
   manifest: Manifest;
@@ -108,8 +113,13 @@ export function packingQuantity(order: FulfillmentOrder, line: Line): number {
     : line.quantity;
 }
 
-export function createFulfillmentOrder(input: unknown): FulfillmentOrder {
-  const manifest = manifestSchema.parse(input);
+export function createFulfillmentOrder(
+  input: unknown,
+  allowEmpty = false,
+): FulfillmentOrder {
+  const manifest = (
+    allowEmpty ? reconciledManifestSchema : manifestSchema
+  ).parse(input);
   const portion = (stage: Stage): Portion => ({
     state: manifest.lines.some((line) => line.stage === stage)
       ? stage === "advanceDry"

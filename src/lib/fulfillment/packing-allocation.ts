@@ -64,6 +64,7 @@ export type PackingAllocationDraft = {
   }[];
 };
 export function allocationWorkUnstarted(order: FulfillmentOrder) {
+  if (order.lastReconciliationId || !order.manifest.lines.length) return false;
   const initial = {
     ...createFulfillmentOrder(order.manifest),
     version: order.version,

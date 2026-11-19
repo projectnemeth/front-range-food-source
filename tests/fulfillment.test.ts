@@ -513,3 +513,24 @@ test("arrival during reconciliation stays held and full repack retains its check
   assert.deepEqual(restarted.packages, []);
   assert.deepEqual(restarted.resolutions, {});
 });
+
+test("removing all selections cannot create an empty delivery or reopen packing outside review", () => {
+  const order = arrive(pack(make(), "advanceDry"));
+  const empty = restartedOrder(
+    order,
+    { ...order.manifest, lines: [] },
+    undefined,
+  );
+  assert.equal(empty.control, "held");
+  assert.equal(empty.portions.advanceDry.state, "notRequired");
+  assert.equal(empty.portions.afterArrival.state, "notRequired");
+  assert.equal(readyForHandoff(empty), false);
+  fails("emptyOrder", () =>
+    run(
+      empty,
+      { type: "control", state: "active", reason: "Resume" },
+      actors.coordinator,
+    ),
+  );
+  assert.throws(() => createFulfillmentOrder({ ...manifest, lines: [] }));
+});

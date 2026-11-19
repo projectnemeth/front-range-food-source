@@ -29,6 +29,7 @@ function check(condition: unknown, code: string): asserts condition {
 }
 // Require the complete untouched state, not just an absence of boxes.
 function unstarted(order: FulfillmentOrder) {
+  if (order.lastReconciliationId || !order.manifest.lines.length) return false;
   return (
     fulfillmentKey(order) ===
     fulfillmentKey({

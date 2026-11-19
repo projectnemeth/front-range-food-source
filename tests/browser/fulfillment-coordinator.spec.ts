@@ -338,12 +338,22 @@ test("coordinator prepares a disabled event, reviews an import and enables dry p
     .getByLabel("Reason for pausing this order")
     .fill("Coordinator stock recount");
   await page.getByRole("button", { name: "Pause for reconciliation" }).click();
+  await page.getByLabel("Remove selection: Rice", { exact: true }).check();
   await page
-    .getByLabel("Revised allocation for Rice", { exact: true })
+    .getByLabel("Removal reason for Rice", { exact: true })
+    .fill("Household no longer wants rice");
+  await page
+    .getByLabel("Returned quantity for Rice", { exact: true })
     .fill("2");
   await page
-    .getByLabel("Allocation change reason for Rice")
-    .fill("Recount reduced this household share");
+    .getByLabel("Discarded quantity for Rice", { exact: true })
+    .fill("1");
+  await page
+    .getByLabel("Removed goods note for Rice", { exact: true })
+    .fill("Two bags returned; one damaged bag discarded");
+  await page
+    .getByLabel("Reviewed stock before disposal for Rice", { exact: true })
+    .fill("12");
   for (const [i, item, category, shelf] of [
     [1, "Pasta", "shelfStable", "Pantry 02"],
     [2, "Pears", "produce", "Produce 02"],
@@ -385,6 +395,21 @@ test("coordinator prepares a disabled event, reviews an import and enables dry p
   await expect(
     page.getByRole("heading", { name: "Reconciliation preview", exact: true }),
   ).toBeVisible();
+  await expect(page.getByText(/REMOVE: Rice/)).toContainText(
+    "2 returned · 1 discarded",
+  );
+  await page
+    .getByLabel("Removed goods note for Rice", { exact: true })
+    .fill("Two bags returned; one damaged bag discarded; volunteer notified");
+  await expect(
+    page.getByRole("heading", { name: "Reconciliation preview", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Preview reconciliation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reconciliation preview", exact: true }),
+  ).toBeVisible();
   await expect(page.getByText(/NEW: Pasta/)).toContainText("Advance dry");
   await expect(page.getByText(/NEW: Pears/)).toContainText("After check-in");
   await page.setViewportSize({ width: 390, height: 844 });
@@ -395,7 +420,7 @@ test("coordinator prepares a disabled event, reviews an import and enables dry p
   await page.setViewportSize({ width: 1280, height: 900 });
   await page
     .getByLabel("Picked goods and repack instructions")
-    .fill("Loose rice returned; repick two bags");
+    .fill("Rice removal accounted for; repack remaining items");
   await page.getByLabel(/I accounted for all picked goods/).check();
   await page.getByLabel(/I cleared this order’s staging positions/).check();
   await page.screenshot({
@@ -409,7 +434,17 @@ test("coordinator prepares a disabled event, reviews an import and enables dry p
     page.getByRole("heading", { name: "Example A · active", exact: true }),
   ).toBeVisible();
   const reconciled = (await allocatedOrder.ref.get()).data()!;
-  expect(reconciled.allocations.rice.quantity).toBe(2);
+  expect(reconciled.allocations.rice).toBeUndefined();
+  expect(
+    reconciled.manifest.lines.some(
+      (line: { id: string }) => line.id === "rice",
+    ),
+  ).toBe(false);
+  const riceBudget = (
+    await adminDb.doc(`fulfillmentEvents/${eventId}/allocationItems/rice`).get()
+  ).data()!;
+  expect(riceBudget.allocated).toBe(8);
+  expect(riceBudget.available).toBe(11);
   expect(reconciled.portions.advanceDry.state).toBe("queued");
   expect(reconciled.portions.afterArrival.state).toBe("waiting");
   expect(reconciled.resolutions).toEqual({});
@@ -433,6 +468,9 @@ test("coordinator prepares a disabled event, reviews an import and enables dry p
   await expect(
     page.getByRole("button", { name: "Picked Pasta", exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Picked Rice", exact: true }),
+  ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Picked Pears", exact: true }),
   ).toHaveCount(0);

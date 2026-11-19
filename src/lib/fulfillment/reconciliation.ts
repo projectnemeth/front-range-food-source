@@ -1,7 +1,9 @@
 import { z } from "zod";
 import {
   createFulfillmentOrder,
-  manifestSchema,
+  reconciledManifestSchema,
+  type Line,
+  type PackingAllocation,
   type FulfillmentOrder,
   type Manifest,
 } from "./model";
@@ -66,13 +68,36 @@ export function selectionTiming(
 export const itemIdentity = (item: string) =>
   item.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
 
+export const removalSchema = z
+  .object({
+    lineId: z.string().trim().min(1).max(160),
+    reason,
+    returnedQuantity: z.number().int().min(0).max(10000),
+    discardedQuantity: z.number().int().min(0).max(10000),
+    goodsNote: reason,
+    budgetDiscardedQuantity: z.number().int().min(0).max(10000).optional(),
+    stockBeforeDisposal: z.number().int().min(0).max(10000).optional(),
+  })
+  .strict()
+  .refine(
+    (r) => r.returnedQuantity + r.discardedQuantity <= 10000,
+    "Accounted goods exceed limit",
+  );
+export type ReconciliationRemoval = z.infer<typeof removalSchema> & {
+  line: Line;
+  allocation: PackingAllocation | null;
+  recordedQuantity: number;
+  replacement: string | null;
+  budgetDiscardedQuantity: number;
+};
 export const reconciliationPreviewSchema = z
   .object({
     action: z.literal("reconciliationPreview"),
     eventId: id,
     reviewId: id,
     operationId: id,
-    manifest: manifestSchema,
+    manifest: reconciledManifestSchema,
+    removals: z.array(removalSchema).max(200).default([]),
     additions: z.array(additionSchema).max(100).default([]),
     adjustments: z
       .array(
@@ -155,6 +180,7 @@ export type ReconciliationPreview = {
   expiresAt: string;
   manifest: Manifest;
   additions?: ReconciliationAddition[];
+  removals?: ReconciliationRemoval[];
   adjustments: (z.infer<
     typeof reconciliationPreviewSchema
   >["adjustments"][number] & {
@@ -183,9 +209,18 @@ export function restartedOrder(
   manifest: Manifest,
   allocations: FulfillmentOrder["allocations"],
 ) {
-  const next = createFulfillmentOrder(manifest);
+  const next = createFulfillmentOrder(manifest, true);
   next.version = current.version + 1;
   next.arrival = current.arrival;
+  const householdKey =
+    current.allocationHouseholdKey ??
+    Object.values(current.allocations ?? {})[0]?.householdKey;
+  if (householdKey) next.allocationHouseholdKey = householdKey;
+  if (!manifest.lines.length) {
+    next.control = "held";
+    next.reason =
+      "All item selections removed. Coordinator review is required before adding items.";
+  }
   if (allocations) next.allocations = allocations;
   if (next.arrival && next.portions.afterArrival.state === "waiting")
     next.portions.afterArrival.state = "queued";

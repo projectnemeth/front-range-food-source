@@ -13,6 +13,7 @@ import { manifest, arrival } from "./fixtures/fulfillment";
 import {
   selectionTiming,
   type ReconciliationAddition,
+  type ReconciliationRemoval,
 } from "../src/lib/fulfillment/reconciliation";
 import { GET, POST } from "../src/app/api/fulfillment/coordinator/route";
 import type {
@@ -902,7 +903,7 @@ test("duplicate matching item lines block packing release instead of exceeding t
   await rejects("packingItemMismatch", packingPreview(links));
 });
 
-async function reconciliationFixture() {
+async function reconciliationFixture(packed = false) {
   const { links } = await setupPacking();
   await packingPreview(links);
   await packingApply();
@@ -916,12 +917,55 @@ async function reconciliationFixture() {
     expectedVersion: 1,
     command: { type: "claim", stage: "advanceDry" },
   });
+  if (packed) {
+    await event()
+      .collection("locations")
+      .doc(fulfillmentKey("A01"))
+      .set({ code: "A01", count: 0, orderId: null, active: true, capacity: 3 });
+    await fulfillment.execute("admin", {
+      eventId: manifest.eventId,
+      orderId: ref.id,
+      operationId: "pick-rice-removal",
+      expectedVersion: 2,
+      command: {
+        type: "resolve",
+        lineId: "rice",
+        quantity: 4,
+        replacement: null,
+        reason: null,
+      },
+    });
+    await fulfillment.execute("admin", {
+      eventId: manifest.eventId,
+      orderId: ref.id,
+      operationId: "pick-diapers-removal",
+      expectedVersion: 3,
+      command: {
+        type: "resolve",
+        lineId: "diapers",
+        quantity: 1,
+        replacement: null,
+        reason: null,
+      },
+    });
+    await fulfillment.execute("admin", {
+      eventId: manifest.eventId,
+      orderId: ref.id,
+      operationId: "pack-removal",
+      expectedVersion: 4,
+      command: {
+        type: "pack",
+        stage: "advanceDry",
+        packages: [{ id: "packed-box", location: "A01" }],
+      },
+    });
+  }
   const start = await store.execute("admin", {
     action: "reconciliationStart",
     eventId: manifest.eventId,
     orderId: ref.id,
     operationId: "review",
-    expectedVersion: 2,
+    expectedVersion: packed ? 5 : 2,
     reason: "Stock and instructions changed",
   });
   assert.ok("reconciliation" in start && start.reconciliation);
@@ -1020,7 +1064,7 @@ test("reconciliation rejects stock overruns, inherited keys, remapping and stale
     }),
   );
   await rejects(
-    "reconciliationMapping",
+    "reconciliationRemovals",
     store.execute("admin", {
       action: "reconciliationPreview",
       eventId: manifest.eventId,
@@ -1476,4 +1520,311 @@ test("new allocated selection binds an order without prior allocations and rejec
     (await ref.get()).data()!.allocations[line.id].householdKey,
     order.manifest.source.key,
   );
+});
+
+const removal = (
+  lineId: string,
+  values: Partial<ReconciliationRemoval> = {},
+) => ({
+  lineId,
+  reason: "Household withdrew selection",
+  returnedQuantity: 0,
+  discardedQuantity: 0,
+  goodsNote: "No goods picked; stock review completed",
+  ...values,
+});
+const removalPreview = (
+  order: FulfillmentOrder,
+  removals = [removal("rice", { stockBeforeDisposal: 12 })],
+  operationId = "revised",
+  reviewId = "review",
+) =>
+  store.execute("admin", {
+    action: "reconciliationPreview",
+    eventId: manifest.eventId,
+    reviewId,
+    operationId,
+    manifest: {
+      ...order.manifest,
+      lines: order.manifest.lines.filter(
+        (line) => !removals.some((r) => r.lineId === line.id),
+      ),
+    },
+    adjustments: [],
+    removals,
+  });
+
+test("removing a packed allocated selection releases its share, deducts discarded stock and archives goods", async () => {
+  const { order, ref } = await reconciliationFixture(true);
+  await removalPreview(order, [
+    removal("rice", {
+      returnedQuantity: 3,
+      discardedQuantity: 1,
+      stockBeforeDisposal: 12,
+      goodsNote: "Three bags returned; one damaged bag discarded",
+    }),
+  ]);
+  await rejects("reconciliationPackages", reconcileApply());
+  assert.equal(
+    (await event().collection("allocationItems").doc("rice").get()).data()!
+      .allocated,
+    12,
+  );
+  await reconcileApply([
+    {
+      id: "packed-box",
+      disposition: "returnedToStock",
+      note: "Box unpacked; goods accounted by item",
+    },
+  ]);
+  const next = (await ref.get()).data()!;
+  assert.equal(
+    next.manifest.lines.some((line: Line) => line.id === "rice"),
+    false,
+  );
+  assert.equal(next.allocations.rice, undefined);
+  assert.equal(next.allocationHouseholdKey, "a");
+  assert.equal(next.lastReconciliationId, "review");
+  assert.equal(next.portions.advanceDry.state, "queued");
+  assert.equal(next.portions.afterArrival.state, "waiting");
+  const budget = (
+    await event().collection("allocationItems").doc("rice").get()
+  ).data()!;
+  assert.equal(budget.allocated, 8);
+  assert.equal(budget.available, 11);
+  assert.equal(
+    (
+      await event().collection("locations").doc(fulfillmentKey("A01")).get()
+    ).data()!.count,
+    0,
+  );
+  const audit = (
+    await ref.collection("activity").doc("reconciliation-apply-review").get()
+  ).data()!;
+  assert.equal(audit.removals[0].line.originalRequest, "Rice");
+  assert.equal(audit.removals[0].recordedQuantity, 4);
+  assert.equal(audit.removals[0].allocation.quantity, 4);
+  assert.equal(audit.removals[0].returnedQuantity, 3);
+  assert.equal(audit.removals[0].discardedQuantity, 1);
+  assert.equal(audit.previous.packages.length, 1);
+  await reconcileApply([
+    {
+      id: "packed-box",
+      disposition: "returnedToStock",
+      note: "Box unpacked; goods accounted by item",
+    },
+  ]);
+  assert.equal(
+    (await event().collection("allocationItems").doc("rice").get()).data()!
+      .available,
+    11,
+  );
+});
+
+test("removal rejects missing or duplicate reviews, double adjustments and undercounted goods", async () => {
+  const { order } = await reconciliationFixture(true);
+  await rejects("reconciliationRemovedGoods", removalPreview(order));
+  await rejects(
+    "reconciliationRemovalStock",
+    removalPreview(order, [removal("rice", { returnedQuantity: 4 })]),
+  );
+  await rejects(
+    "allocationOverStock",
+    removalPreview(order, [
+      removal("rice", {
+        returnedQuantity: 3,
+        discardedQuantity: 1,
+        stockBeforeDisposal: 8,
+      }),
+    ]),
+  );
+  await rejects(
+    "reconciliationRemovalStock",
+    removalPreview(order, [
+      removal("rice", { discardedQuantity: 4, stockBeforeDisposal: 3 }),
+    ]),
+  );
+  await rejects(
+    "reconciliationRemovals",
+    removalPreview(order, [removal("unknown")]),
+  );
+  const r = removal("rice", { returnedQuantity: 4, stockBeforeDisposal: 12 });
+  await rejects("reconciliationRemovals", removalPreview(order, [r, r]));
+  await rejects(
+    "reconciliationAdjustment",
+    store.execute("admin", {
+      action: "reconciliationPreview",
+      eventId: manifest.eventId,
+      reviewId: "review",
+      operationId: "double",
+      manifest: {
+        ...order.manifest,
+        lines: order.manifest.lines.filter((l) => l.id !== "rice"),
+      },
+      removals: [r],
+      adjustments: [
+        { lineId: "rice", quantity: 0, available: 12, reason: "Duplicate" },
+      ],
+    }),
+  );
+});
+
+test("removal cancellation preserves quantities and stale stock prevents any release", async () => {
+  const { order, ref } = await reconciliationFixture();
+  await removalPreview(order);
+  await event()
+    .collection("allocationItems")
+    .doc("rice")
+    .update({ version: 99 });
+  await rejects("staleAllocation", reconcileApply());
+  assert.deepEqual((await ref.get()).data()!.manifest, order.manifest);
+  await store.execute("admin", {
+    action: "reconciliationCancel",
+    eventId: manifest.eventId,
+    reviewId: "review",
+    expectedVersion: order.version,
+    goodsUnchanged: true,
+    reason: "Request retained; no physical changes",
+  });
+  assert.equal((await ref.get()).data()!.allocations.rice.quantity, 4);
+  assert.equal(
+    (await event().collection("allocationItems").doc("rice").get()).data()!
+      .allocated,
+    12,
+  );
+});
+
+test("removing every selection holds an empty order and preserves household identity when selections return", async () => {
+  const { order, ref } = await reconciliationFixture();
+  await removalPreview(
+    order,
+    order.manifest.lines.map((line) =>
+      removal(line.id, line.id === "rice" ? { stockBeforeDisposal: 12 } : {}),
+    ),
+  );
+  await reconcileApply();
+  const empty = (await ref.get()).data() as FulfillmentOrder;
+  assert.equal(empty.control, "held");
+  assert.equal(empty.manifest.lines.length, 0);
+  assert.equal(empty.portions.advanceDry.state, "notRequired");
+  assert.equal(empty.portions.afterArrival.state, "notRequired");
+  assert.equal(empty.deliveredAt, null);
+  const reimport = await preview("restore-source", [order.manifest]);
+  assert.equal(reimport.rows[0].status, "blocked");
+  await rejects("previewBlocked", apply("restore-source"));
+  const started = await store.execute("admin", {
+    action: "reconciliationStart",
+    eventId: manifest.eventId,
+    orderId: ref.id,
+    operationId: "restore-review",
+    expectedVersion: empty.version,
+    reason: "Household requests rice again",
+  });
+  assert.ok("reconciliation" in started && started.reconciliation);
+  const line = { ...selectedLine(), item: "Rice", unit: "bag" };
+  await selectionPreview(
+    started.reconciliation.order,
+    [line],
+    [selectionReview(line, "shelfStable", 12)],
+    "restore-preview",
+    "restore-review",
+  );
+  await store.execute("admin", {
+    action: "reconciliationApply",
+    eventId: manifest.eventId,
+    previewId: "restore-preview",
+    confirmed: true,
+    goodsAccountedFor: true,
+    stagingCleared: true,
+    workNote: "Repack newly requested rice",
+    packages: [],
+  });
+  const restored = (await ref.get()).data()!;
+  assert.equal(restored.allocations[line.id].householdKey, "a");
+  assert.equal(restored.control, "active");
+  assert.equal(
+    (await event().collection("allocationItems").doc("rice").get()).data()!
+      .allocated,
+    11,
+  );
+});
+
+test("unallocated removal does not create stock credits and cannot be disguised as remapping", async () => {
+  const { order, ref } = await reconciliationFixture();
+  const removed = removal("diapers", {
+    returnedQuantity: 1,
+    goodsNote: "One unrecorded loose pack returned",
+  });
+  const replacement = {
+    ...order.manifest.lines.find((line) => line.id === "diapers")!,
+    id: "changed-diapers",
+    shelf: "Elsewhere",
+  };
+  await rejects(
+    "reconciliationDuplicateItem",
+    store.execute("admin", {
+      action: "reconciliationPreview",
+      eventId: manifest.eventId,
+      reviewId: "review",
+      operationId: "remap",
+      manifest: {
+        ...order.manifest,
+        lines: [
+          ...order.manifest.lines.filter((line) => line.id !== "diapers"),
+          replacement,
+        ],
+      },
+      removals: [removed],
+      additions: [selectionReview(replacement)],
+      adjustments: [],
+    }),
+  );
+  await removalPreview(order, [removed]);
+  await reconcileApply();
+  const audit = (
+    await ref.collection("activity").doc("reconciliation-apply-review").get()
+  ).data()!;
+  assert.equal(audit.removals[0].allocation, null);
+  assert.equal(audit.adjustments.length, 0);
+  assert.equal(
+    (await event().collection("allocationItems").doc("rice").get()).data()!
+      .available,
+    12,
+  );
+});
+
+test("discarded substitute goods do not automatically reduce the original item's stock", async () => {
+  const { ref } = await reconciliationFixture(true);
+  await ref.update({
+    "resolutions.rice.replacement": "Pasta",
+    "resolutions.rice.approvedBy": "admin",
+  });
+  const current = (await ref.get()).data() as FulfillmentOrder;
+  const r = removal("rice", {
+    returnedQuantity: 3,
+    discardedQuantity: 1,
+    stockBeforeDisposal: 12,
+    goodsNote:
+      "Substitute pasta returned/discarded; pasta stock corrected separately",
+  });
+  await rejects("reconciliationRemovalStock", removalPreview(current, [r]));
+  await removalPreview(current, [{ ...r, budgetDiscardedQuantity: 0 }]);
+  await reconcileApply([
+    {
+      id: "packed-box",
+      disposition: "returnedToStock",
+      note: "Box unpacked; substitution counted",
+    },
+  ]);
+  const budget = (
+    await event().collection("allocationItems").doc("rice").get()
+  ).data()!;
+  assert.equal(budget.available, 12);
+  assert.equal(budget.allocated, 8);
+  const audit = (
+    await ref.collection("activity").doc("reconciliation-apply-review").get()
+  ).data()!;
+  assert.equal(audit.removals[0].replacement, "Pasta");
+  assert.equal(audit.removals[0].discardedQuantity, 1);
+  assert.equal(audit.removals[0].budgetDiscardedQuantity, 0);
 });

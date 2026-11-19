@@ -1,6 +1,6 @@
 # Phase Two fulfillment implementation status
 
-Updated November 19, 2026. Eleventh development slice: new selections during coordinator-reviewed reconciliation. Google metadata, headers, and a small selection of noncontact request cells were inspected read-only. No live import, deployment, or pilot integration occurred.
+Updated November 19, 2026. Twelfth development slice: reviewed selection removal with stock and audit accounting. Google metadata, headers, and a small selection of noncontact request cells were inspected read-only. No live import, deployment, or pilot integration occurred.
 
 ## Latest packing-quantity milestone
 
@@ -51,7 +51,7 @@ Only the new, disabled-by-default Phase Two routes and APIs expose these workflo
 
 The dry workspace works against explicitly provisioned records; it is not ready for a live pilot without source mapping and operational setup. Its endpoint derives UID from verified credentials and role from the event grant. Coordinator setup now provisions isolated events, positions, and grants for existing accounts. Account creation, additional coordinator provisioning, real Google-column mapping, live reading, and ongoing source reconciliation remain outstanding. All tests and rehearsals operate in emulators only. No existing event is enabled by this work. The first interface is English, uses coordinator-supplied event IDs, and stages all dry packages for a portion at one position; expanded event selection, language support, and multiple-position entry remain later improvements.
 
-Live source import/reconciliation, removing/remapping existing lines on orders with work, standard-box walk-up manifests with unknown contents, package storage compatibility, exact item-to-package allocations, partial handoff/restock, moving/reassigning packages and work, and closeout are not implemented. The current command schema deliberately rejects partial handoff fields rather than treating them as full delivery. Approved shortages preserve supplied quantities in the resolution records; user-facing reduced/unserved outcome reporting remains to be built.
+Live source import/reconciliation, remapping retained lines on orders with work, standard-box walk-up manifests with unknown contents, package storage compatibility, exact item-to-package allocations, partial handoff/restock, moving/reassigning packages and work, and closeout are not implemented. The current command schema deliberately rejects partial handoff fields rather than treating them as full delivery. Approved shortages preserve supplied quantities in the resolution records; user-facing reduced/unserved outcome reporting remains to be built.
 
 The arrival operation consumes already validated logical arrivals in memory. No bridge credentials, outbox, retry service, printing changes, or Google-to-Firebase integration exist yet. These require the failure and authorization checks in the [implementation plan](fulfillment-implementation-plan.md).
 
@@ -99,3 +99,11 @@ Coordinators can now append explicitly reviewed selections during a held reconci
 The label/check-in pilot, production deployment and Google sources remain unchanged. This implementation remains behind the default-off Phase Two gate.
 
 Validation for the new-selection slice: 42 unit tests and all 55 emulator cases passed (54 in the full run, plus the additional household-binding case in a focused run). All eight browser regressions passed, including new dry/produce selections, post-apply dry picking and existing print routes. Type checking, zero-warning lint and the production build passed. The mobile reconciliation screen was visually reviewed. No pilot files, production data or deployment configuration changed.
+
+## Selection-removal slice
+
+Coordinators can remove saved selections with explicit reasons and returned/discarded goods counts. Allocated removals release the order's share and deduct discarded original-item units from reviewed available stock, without double-counting returns. Substitutions receive separate budget-impact review. Empty orders stay held and cannot be delivered; household binding and check-in survive later re-additions. Reconciled orders cannot be silently replaced by source imports or fresh allocation release. Existing package disposition, full repack, authorization, immutable preview, stock-version and retry safeguards remain in force. See [removal procedure](fulfillment-reconciliation.md#removing-saved-item-selections).
+
+All changes remain local, behind the default-off Phase Two gate. The label/check-in pilot, Google sources and production deployment are unchanged.
+
+Validation for the removal slice: all 43 unit tests, 61 emulator tests and eight browser regressions passed, plus type checking, zero-warning lint and the production build. Coverage includes actual staged-package removal, share release without return double-counting, discarded and substituted goods, stale-budget rollback, cancellation, all-item removal, preserved household binding on re-addition, source-reimport protection, preview invalidation and the absence of removed items from dry picking. The mobile screen was visually reviewed. The original pilot and print-route files remain unchanged.

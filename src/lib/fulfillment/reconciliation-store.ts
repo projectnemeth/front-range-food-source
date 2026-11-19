@@ -7,6 +7,7 @@ import {
   selectionTiming,
   itemIdentity,
   type ReconciliationAddition,
+  type ReconciliationRemoval,
   type ReconciliationCommand,
   type ReconciliationReview,
   type ReconciliationPreview,
@@ -268,12 +269,62 @@ export class ReconciliationStore {
             proposed.mappingVersion === config.mappingVersion,
           "reconciliationIdentity",
         );
-        check(
-          original.lines.every((old) =>
-            proposed.lines.some((line) => line.id === old.id),
-          ),
-          "reconciliationMapping",
+        const removedLines = original.lines.filter(
+          (old) => !proposed.lines.some((line) => line.id === old.id),
         );
+        check(
+          command.removals.length === removedLines.length &&
+            new Set(command.removals.map((r) => r.lineId)).size ===
+              removedLines.length &&
+            command.removals.every((r) =>
+              removedLines.some((line) => line.id === r.lineId),
+            ),
+          "reconciliationRemovals",
+        );
+        const removals: ReconciliationRemoval[] = command.removals.map((r) => {
+          const line = removedLines.find((line) => line.id === r.lineId)!;
+          const allocation =
+            current.allocations && Object.hasOwn(current.allocations, r.lineId)
+              ? current.allocations[r.lineId]
+              : null;
+          const recordedQuantity = Object.hasOwn(current.resolutions, r.lineId)
+            ? current.resolutions[r.lineId].quantity
+            : 0;
+          const replacement =
+            current.resolutions[r.lineId]?.replacement ?? null;
+          const budgetDiscardedQuantity = allocation
+            ? replacement
+              ? r.budgetDiscardedQuantity
+              : r.discardedQuantity
+            : 0;
+          check(
+            budgetDiscardedQuantity !== undefined &&
+              budgetDiscardedQuantity <= r.discardedQuantity &&
+              (!allocation ||
+                replacement ||
+                r.budgetDiscardedQuantity === undefined ||
+                r.budgetDiscardedQuantity === r.discardedQuantity),
+            "reconciliationRemovalStock",
+          );
+          check(
+            r.returnedQuantity + r.discardedQuantity >= recordedQuantity,
+            "reconciliationRemovedGoods",
+          );
+          check(
+            !allocation ||
+              (r.stockBeforeDisposal !== undefined &&
+                r.stockBeforeDisposal >= budgetDiscardedQuantity),
+            "reconciliationRemovalStock",
+          );
+          return {
+            ...r,
+            line,
+            allocation,
+            recordedQuantity,
+            replacement,
+            budgetDiscardedQuantity,
+          };
+        });
         for (const oldLine of original.lines) {
           const line = proposed.lines.find((l) => l.id === oldLine.id);
           if (line)
@@ -286,6 +337,7 @@ export class ReconciliationStore {
             );
         }
         for (const lineId of Object.keys(current.allocations ?? {})) {
+          if (removedLines.some((line) => line.id === lineId)) continue;
           const line = proposed.lines.find((l) => l.id === lineId);
           const previous = original.lines.find((l) => l.id === lineId)!;
           check(
@@ -310,6 +362,7 @@ export class ReconciliationStore {
           : null;
         check(!catalog || catalog.size <= 200, "setupLimitExceeded");
         const householdKey =
+          current.allocationHouseholdKey ??
           Object.values(current.allocations ?? {})[0]?.householdKey ??
           original.source.key;
         const additions: ReconciliationAddition[] = command.additions.map(
@@ -321,9 +374,13 @@ export class ReconciliationStore {
               "reconciliationSelectionTiming",
             );
             check(
-              proposed.lines.filter(
-                (other) => itemIdentity(other.item) === itemIdentity(line.item),
-              ).length === 1,
+              !original.lines.some(
+                (old) => itemIdentity(old.item) === itemIdentity(line.item),
+              ) &&
+                proposed.lines.filter(
+                  (other) =>
+                    itemIdentity(other.item) === itemIdentity(line.item),
+                ).length === 1,
               "reconciliationDuplicateItem",
             );
             const matches = catalog!.docs.filter(
@@ -376,11 +433,33 @@ export class ReconciliationStore {
           );
         }
         check(
-          new Set(command.adjustments.map((a) => a.lineId)).size ===
-            command.adjustments.length,
+          command.adjustments.every(
+            (a) => !removedLines.some((line) => line.id === a.lineId),
+          ),
           "reconciliationAdjustment",
         );
-        const allocations = command.adjustments.map((a) =>
+        const requestedAdjustments = [
+          ...command.adjustments,
+          ...removals.flatMap((r) =>
+            r.allocation
+              ? [
+                  {
+                    lineId: r.lineId,
+                    quantity: 0,
+                    available:
+                      r.stockBeforeDisposal! - r.budgetDiscardedQuantity,
+                    reason: r.reason,
+                  },
+                ]
+              : [],
+          ),
+        ];
+        check(
+          new Set(requestedAdjustments.map((a) => a.lineId)).size ===
+            requestedAdjustments.length,
+          "reconciliationAdjustment",
+        );
+        const allocations = requestedAdjustments.map((a) =>
           current.allocations && Object.hasOwn(current.allocations, a.lineId)
             ? current.allocations[a.lineId]
             : undefined,
@@ -398,7 +477,7 @@ export class ReconciliationStore {
               ),
             )
           : [];
-        const adjustments = command.adjustments.map((a, i) => {
+        const adjustments = requestedAdjustments.map((a, i) => {
           const allocation = allocations[i]!,
             item = items[i].data();
           check(
@@ -443,6 +522,7 @@ export class ReconciliationStore {
           expiresAt: new Date(Date.parse(now) + 30 * 60 * 1000).toISOString(),
           manifest: proposed,
           additions,
+          removals,
           adjustments,
           appliedAt: null,
         };
@@ -592,7 +672,12 @@ export class ReconciliationStore {
           appliedAt: now,
         } as PackingAllocation;
       });
+      for (const r of preview.removals ?? [])
+        if (allocations) delete allocations[r.lineId];
       const next = restartedOrder(current, preview.manifest, allocations);
+      next.lastReconciliationId = review.id;
+      if (addedBudgets.length)
+        next.allocationHouseholdKey = addedBudgets[0].householdKey;
       const finished = {
         ...review,
         status: "applied" as const,
@@ -644,6 +729,7 @@ export class ReconciliationStore {
           manifest: next.manifest,
           adjustments: preview.adjustments,
           additions,
+          removals: preview.removals ?? [],
           packages: command.packages,
           workNote: command.workNote,
           goodsAccountedFor: true,

@@ -37,6 +37,11 @@ export default function ReconciliationPanel({
     scope: "",
     ids: [],
   });
+  const [removedRows, setRemovedRows] = useState<{
+    scope: string;
+    ids: string[];
+  }>({ scope: "", ids: [] });
+  const removedIds = removedRows.scope === scope ? removedRows.ids : [];
   const addedIds = addedRows.scope === scope ? addedRows.ids : [];
   const open = !!order?.reconciliationId && review?.status === "open";
   return (
@@ -109,6 +114,12 @@ export default function ReconciliationPanel({
               ? `Checked in ${order.arrival.checkedInAt}; arrival priority will be preserved.`
               : "Not checked in. Perishables will keep waiting."}
           </p>
+          {!order.manifest.lines.length && (
+            <p role="alert">
+              All item selections have been removed. This order stays on hold
+              and cannot be handed off. Start a new review to add selections.
+            </p>
+          )}
           <ul>
             {order.packages.map((p) => (
               <li key={p.id}>
@@ -163,6 +174,30 @@ export default function ReconciliationPanel({
                   e.preventDefault();
                   if (disabled) return;
                   const data = new FormData(e.currentTarget);
+                  const removals = removedIds.map((id) => ({
+                    lineId: id,
+                    reason: String(data.get(`remove-reason-${id}`)),
+                    returnedQuantity: Number(data.get(`remove-returned-${id}`)),
+                    discardedQuantity: Number(
+                      data.get(`remove-discarded-${id}`),
+                    ),
+                    goodsNote: String(data.get(`remove-note-${id}`)),
+                    ...(order.allocations?.[id] &&
+                    order.resolutions[id]?.replacement
+                      ? {
+                          budgetDiscardedQuantity: Number(
+                            data.get(`remove-budget-discarded-${id}`),
+                          ),
+                        }
+                      : {}),
+                    ...(order.allocations?.[id]
+                      ? {
+                          stockBeforeDisposal: Number(
+                            data.get(`remove-stock-${id}`),
+                          ),
+                        }
+                      : {}),
+                  }));
                   const additions = addedIds.map((id) => ({
                     lineId: id,
                     category: String(
@@ -195,19 +230,28 @@ export default function ReconciliationPanel({
                       revision: String(data.get("revision")),
                     },
                     lines: [
-                      ...order.manifest.lines.map((line, i) => ({
-                        ...line,
-                        originalRequest: String(data.get(`request-${i}`)),
-                        quantity: order.allocations?.[line.id]
-                          ? line.quantity
-                          : Number(data.get(`requested-${i}`)),
-                      })),
+                      ...order.manifest.lines.flatMap((line, i) =>
+                        removedIds.includes(line.id)
+                          ? []
+                          : [
+                              {
+                                ...line,
+                                originalRequest: String(
+                                  data.get(`request-${i}`),
+                                ),
+                                quantity: order.allocations?.[line.id]
+                                  ? line.quantity
+                                  : Number(data.get(`requested-${i}`)),
+                              },
+                            ],
+                      ),
                       ...newLines,
                     ],
                   };
                   const adjustments = Object.entries(
                     order.allocations ?? {},
                   ).flatMap(([lineId, allocation], i) => {
+                    if (removedIds.includes(lineId)) return [];
                     const budget = view.allocations.find(
                       (a) => a.itemId === allocation.itemId,
                     );
@@ -232,6 +276,7 @@ export default function ReconciliationPanel({
                     operationId: crypto.randomUUID(),
                     manifest,
                     additions,
+                    removals,
                     adjustments,
                   });
                 }}
@@ -279,31 +324,163 @@ export default function ReconciliationPanel({
                         · {line.storage} · {line.shelf}
                       </p>
                       <label>
-                        Original request for {line.item}
                         <input
-                          name={`request-${i}`}
-                          required
-                          maxLength={2000}
-                          defaultValue={line.originalRequest}
-                        />
+                          type="checkbox"
+                          checked={removedIds.includes(line.id)}
+                          onChange={(e) => {
+                            clear();
+                            setRemovedRows({
+                              scope,
+                              ids: e.target.checked
+                                ? [...removedIds, line.id]
+                                : removedIds.filter((id) => id !== line.id),
+                            });
+                          }}
+                        />{" "}
+                        Remove selection: {line.item}
                       </label>
-                      {!order.allocations?.[line.id] && (
+                      {removedIds.includes(line.id) && (
+                        <div className={styles.form}>
+                          <p>
+                            Original request: {line.originalRequest}. Packing
+                            target:{" "}
+                            {order.allocations?.[line.id]?.quantity ??
+                              line.quantity}{" "}
+                            {line.unit}. Recorded picked quantity:{" "}
+                            {order.resolutions[line.id]?.quantity ?? 0}. Include
+                            any unrecorded loose goods in the returned/discarded
+                            counts. Package dispositions are recorded separately
+                            when applying.
+                          </p>
+                          <label>
+                            Removal reason for {line.item}
+                            <input
+                              name={`remove-reason-${line.id}`}
+                              required
+                              maxLength={2000}
+                            />
+                          </label>
+                          <label>
+                            Returned quantity for {line.item}
+                            <input
+                              name={`remove-returned-${line.id}`}
+                              type="number"
+                              min={0}
+                              max={10000}
+                              required
+                              defaultValue={
+                                order.resolutions[line.id]?.quantity ?? 0
+                              }
+                            />
+                          </label>
+                          <label>
+                            Discarded quantity for {line.item}
+                            <input
+                              name={`remove-discarded-${line.id}`}
+                              type="number"
+                              min={0}
+                              max={10000}
+                              required
+                              defaultValue={0}
+                            />
+                          </label>
+                          {order.allocations?.[line.id] &&
+                            order.resolutions[line.id]?.replacement && (
+                              <label>
+                                Discarded original-item units for {line.item}
+                                <input
+                                  name={`remove-budget-discarded-${line.id}`}
+                                  type="number"
+                                  min={0}
+                                  max={10000}
+                                  required
+                                  defaultValue={0}
+                                />
+                                <span>
+                                  Recorded substitute:{" "}
+                                  {order.resolutions[line.id].replacement}. Only
+                                  discarded original-item units reduce this
+                                  allocation budget. Reconcile substitute
+                                  inventory separately in your stock records.
+                                </span>
+                              </label>
+                            )}
+                          <label>
+                            Removed goods note for {line.item}
+                            <input
+                              name={`remove-note-${line.id}`}
+                              required
+                              maxLength={2000}
+                            />
+                          </label>
+                          {order.allocations?.[line.id] && (
+                            <>
+                              <label>
+                                Reviewed stock before disposal for {line.item}
+                                <input
+                                  name={`remove-stock-${line.id}`}
+                                  type="number"
+                                  min={0}
+                                  max={10000}
+                                  required
+                                  defaultValue={
+                                    view.allocations.find(
+                                      (a) =>
+                                        a.itemId ===
+                                        order.allocations![line.id].itemId,
+                                    )?.available
+                                  }
+                                />
+                              </label>
+                              <p>
+                                The approved share is released. Returned goods
+                                do not increase total stock. Discarded units are
+                                subtracted from this reviewed total; the result
+                                must cover other households.
+                              </p>
+                            </>
+                          )}
+                          {!order.allocations?.[line.id] && (
+                            <p>
+                              This selection has no allocation budget. Record
+                              returns/discards in your physical stock records;
+                              software will not infer an inventory increase.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      <fieldset
+                        disabled={removedIds.includes(line.id)}
+                        className={styles.form}
+                      >
                         <label>
-                          Revised quantity for {line.item}
+                          Original request for {line.item}
                           <input
-                            name={`requested-${i}`}
-                            type="number"
-                            min={1}
-                            max={10000}
+                            name={`request-${i}`}
                             required
-                            defaultValue={line.quantity}
+                            maxLength={2000}
+                            defaultValue={line.originalRequest}
                           />
                         </label>
-                      )}
+                        {!order.allocations?.[line.id] && (
+                          <label>
+                            Revised quantity for {line.item}
+                            <input
+                              name={`requested-${i}`}
+                              type="number"
+                              min={1}
+                              max={10000}
+                              required
+                              defaultValue={line.quantity}
+                            />
+                          </label>
+                        )}
+                      </fieldset>
                     </div>
                   ))}
                   {Object.entries(order.allocations ?? {}).map(
                     ([lineId, allocation], i) => {
+                      if (removedIds.includes(lineId)) return null;
                       const line = order.manifest.lines.find(
                         (l) => l.id === lineId,
                       )!;
@@ -556,6 +733,29 @@ export default function ReconciliationPanel({
                           ? "Advance dry"
                           : "After check-in"}{" "}
                         · Request: {line.originalRequest}
+                      </li>
+                    ))}
+                  </ul>
+                  {!preview.manifest.lines.length && (
+                    <p role="alert">
+                      Every selection will be removed. Both packing portions
+                      become not required; the order remains on hold and is not
+                      delivered.
+                    </p>
+                  )}
+                  <h4>Selections to remove</h4>
+                  <ul>
+                    {(preview.removals ?? []).map((r) => (
+                      <li key={r.lineId}>
+                        REMOVE: {r.line.item} · original request:{" "}
+                        {r.line.originalRequest} · {r.line.quantity}{" "}
+                        {r.line.unit} requested · {r.recordedQuantity} recorded
+                        picked · {r.returnedQuantity} returned ·{" "}
+                        {r.discardedQuantity} discarded. {r.reason}.{" "}
+                        {r.goodsNote}.
+                        {r.allocation
+                          ? ` Release ${r.allocation.quantity} allocated units; reviewed total stock ${r.stockBeforeDisposal} minus ${r.budgetDiscardedQuantity} discarded original-item units = ${r.stockBeforeDisposal! - r.budgetDiscardedQuantity}.`
+                          : " No allocation budget; physical stock records require manual reconciliation."}
                       </li>
                     ))}
                   </ul>

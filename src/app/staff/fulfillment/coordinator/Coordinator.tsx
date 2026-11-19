@@ -33,7 +33,13 @@ const errors: Record<string, string> = {
   reconciliationIdentity:
     "Order, event and source identity must remain the same.",
   reconciliationMapping:
-    "Keep existing lines and their item identities, units, preparation stages and storage classes. Add new selections separately.",
+    "Keep retained item identities, units, preparation stages and storage classes. Review removals and additions separately.",
+  reconciliationRemovals:
+    "Every omitted selection needs exactly one removal review. Keep the other selections on the order.",
+  reconciliationRemovedGoods:
+    "Account for at least the recorded picked quantity in returned and discarded goods, including any loose items.",
+  reconciliationRemovalStock:
+    "Enter the reviewed stock before disposal. It cannot be less than the discarded quantity.",
   reconciliationSelections:
     "Every added line needs exactly one new-selection review. Reload and review the new selections.",
   reconciliationSelectionTiming:

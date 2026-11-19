@@ -75,6 +75,10 @@ export function applyCommand(
 
   if (command.type === "control") {
     requireState(coordinator, "forbidden");
+    requireState(
+      command.state !== "active" || order.manifest.lines.length > 0,
+      "emptyOrder",
+    );
     order.control = command.state;
     order.reason = command.reason;
     releasePerishables(order);

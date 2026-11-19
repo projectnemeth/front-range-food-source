@@ -16,7 +16,7 @@ Cancel a review only if goods, contents and staging positions have not changed. 
 
 This is a full-order repack, not a partial box edit. Existing package IDs and picked outcomes remain in audit history, not in the restarted order. Gathered, handed-over, delivered, cancelled or departed orders are rejected and need a separate return/correction workflow.
 
-This slice supports changes to existing lines and approved allocations, plus reviewed new item selections. Existing lines cannot be removed or remapped to a different item, unit, preparation stage or storage class. Source imports still reject changes to orders with work; reconciliation is a separate explicit coordinator action, not an automatic source refresh.
+This slice supports changes to existing lines and approved allocations, plus reviewed new item selections. Existing selections can be removed through explicit review; retained lines cannot be remapped to a different item, unit, preparation stage or storage class. Source imports still reject changes to orders with work; reconciliation is a separate explicit coordinator action, not an automatic source refresh.
 
 Stock values are reviewed allocation budgets, not measured on-hand inventory. The proposed event total equals its current allocated total minus this order's previous share plus its revised share. It must fit the reviewed available budget. Package disposition never automatically increases stock. Original approved plans remain historical records; allocation summaries and per-order overrides record reconciliation references. A stock reduction below all other outstanding shares requires further coordinated reductions; there is no multi-order reconciliation transaction yet.
 
@@ -38,4 +38,22 @@ For an item with a released allocation budget, enter the revised total event sto
 
 For an item with no allocation budget, the reviewed line quantity becomes its packing quantity. The coordinator confirms household size and physical availability; this does not create an inventory reservation or a new proportional allocation plan. If a matching budget appears between preview and apply, apply rejects the stale review. Budget version changes and competing household additions also require a new preview rather than silently overspending stock.
 
-All new selections remain proposed until apply. Cancel leaves the original manifest and budgets intact. Apply includes new selections in the same full-order repack, package-disposition and staging-clearance transaction as other reconciliation changes. Removing a proposed selection from the form invalidates its preview; removal of an already saved order line remains separate future work.
+All new selections remain proposed until apply. Cancel leaves the original manifest and budgets intact. Apply includes new selections in the same full-order repack, package-disposition and staging-clearance transaction as other reconciliation changes. Removing a proposed selection from the form invalidates its preview; saved selections use the separate removal review below.
+
+## Removing saved item selections
+
+Select **Remove selection** on each unwanted item. Enter a reason, returned and discarded quantities, and a goods note. Counts must account for at least the recorded picked quantity, including any unrecorded loose goods. Review the physical goods before previewing; if the actual disposition changes, update the review and generate a new preview before applying. Each omitted line requires exactly one removal review. Remaining items retain their identity, unit, timing and storage classification. Removing and re-adding the same item in one review cannot bypass those protections.
+
+For allocated items, enter **Reviewed stock before disposal** in the allocation's units. The server computes:
+
+- New allocated total = previous allocated total − this order's approved share.
+- New available total = reviewed stock before disposal − discarded original-item units.
+- The remaining allocated total must fit the new available total.
+
+Returned goods do not increase the available total: that total already includes the allocation being released. For example, an event with 12 units allocated, including this household's four, releases those four on removal. If three are returned and one discarded, a reviewed total of 12 becomes 11 available and eight allocated. This avoids double-counting returns or offering discarded goods to another household. The immutable preview captures the budget version; concurrent budget changes reject apply and require review again.
+
+If a substitute was picked, explicitly count the discarded **original-item** units that affect this budget. Discarding a substitute does not automatically reduce the original item's stock. The substitute name, overall returned/discarded counts and budget-specific discard count remain in the audit. Reconcile the substitute's physical stock separately. Items without an allocation budget also retain return/discard history but require manual physical-stock updates; no inventory credit is inferred.
+
+Removal is part of the existing full-order repack. Every staged package still needs a disposition, loose goods must be accounted for, and staging positions must be cleared before apply. The single transaction removes selected lines and their allocation entries, updates affected budgets, resets the remaining work, releases positions, and records the previous order, original requests, allocations, picked quantities, substitutions, goods counts, reasons, coordinator and timestamps. Retries cannot release the same allocation twice. Cancelling an untouched review changes no selections or budgets.
+
+Removing the final selection leaves an empty order **on hold**, with both portions not required and no delivery recorded. It cannot be reopened through an ordinary resume command or handed off. A new coordinator review may add selections again. Its original household allocation binding and check-in are preserved, and source imports cannot silently restore removed items. Initial source imports still require at least one selection. Gathered, delivered or otherwise terminal orders remain outside reconciliation.
