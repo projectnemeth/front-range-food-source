@@ -449,6 +449,12 @@ function Checklist({
             : `Assigned to ${detail.dry.owner}.`}
         </p>
       )}
+      {detail.reconciliationId && (
+        <p role="alert">
+          Coordinator reconciliation in progress. Stop packing and keep all
+          goods identifiable. {detail.holdReason}
+        </p>
+      )}
       {detail.dry.state === "notRequired" && <p>No dry items requested.</p>}
       <ul className={styles.lines}>
         {detail.lines.map((line) => {

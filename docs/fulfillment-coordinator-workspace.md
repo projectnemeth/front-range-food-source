@@ -56,3 +56,7 @@ The screen does not fetch Google responses, validate all source columns against 
 Use only the demo Firebase emulator project for the committed fictional fixtures. The browser rehearsal creates a disabled event, adds a position, previews without creating orders, applies once, reviews and applies an unstarted change, and explicitly enables the event before the dry picker can claim it. Server tests additionally cover conflicting setup edits, revoked access, occupied positions, atomic apply retries, duplicate sources, expired/stale drafts, and cross-event authorization.
 
 The CI browser step opts into Phase Two only in its emulator process, so these new tests are exercised rather than skipped. Production and local runtime configuration remain unchanged. A live pilot still requires reviewed real-source mapping, staff/account setup, deployment-baseline checks, and the operational rehearsal described in the implementation plan.
+
+## Reconciliation after packing begins
+
+A separate [coordinator-reviewed full-repack workflow](fulfillment-reconciliation.md) now handles changes to existing instructions and released allocation quantities. Ordinary import and allocation-release operations retain their existing protections. The original approved plan remains historical; current event budgets and per-order quantities include explicitly reviewed reconciliation adjustments. No live integration or pilot change is included.

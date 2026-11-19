@@ -35,3 +35,7 @@ Perishables remain after check-in. This planner does not set preparation stages 
 ## Validation
 
 Unit coverage includes proportional allocation, stock conservation across 101 stock levels, zero/scarce stock, stable tie-breaking, invalid inputs, and reviewed adjustments. Emulator coverage includes concurrent approval retries, audit/history, current-plan replacement, stale stock-plan/configuration detection, expiry, revoked permissions, and no fulfillment-order creation. The coordinator browser rehearsal checks the proposal, a rejected reasonless adjustment, successful approval with an unallocated remainder, and mobile width. Existing registration and printing regressions run alongside it.
+
+## Reconciliation after packing begins
+
+A separate [coordinator-reviewed full-repack workflow](fulfillment-reconciliation.md) now handles changes to existing instructions and released allocation quantities. Ordinary import and allocation-release operations retain their existing protections. The original approved plan remains historical; current event budgets and per-order quantities include explicitly reviewed reconciliation adjustments. No live integration or pilot change is included.

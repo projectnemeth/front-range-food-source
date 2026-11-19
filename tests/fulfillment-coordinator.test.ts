@@ -11,7 +11,7 @@ import { FulfillmentStore, fulfillmentKey } from "../src/lib/fulfillment/store";
 import { WorkflowError } from "../src/lib/fulfillment/workflow";
 import { manifest } from "./fixtures/fulfillment";
 import { GET, POST } from "../src/app/api/fulfillment/coordinator/route";
-import type { Manifest } from "../src/lib/fulfillment/model";
+import type { FulfillmentOrder, Manifest } from "../src/lib/fulfillment/model";
 
 let env: RulesTestEnvironment;
 let now = "2026-11-07T16:00:00Z";
@@ -892,4 +892,248 @@ test("duplicate matching item lines block packing release instead of exceeding t
     ],
   });
   await rejects("packingItemMismatch", packingPreview(links));
+});
+
+async function reconciliationFixture() {
+  const { links } = await setupPacking();
+  await packingPreview(links);
+  await packingApply();
+  await event().update({ enabled: true, status: "OPEN" });
+  const ref = adminDb.doc(`fulfillmentOrders/${links[0].orderId}`);
+  const fulfillment = new FulfillmentStore(adminDb);
+  await fulfillment.execute("admin", {
+    eventId: manifest.eventId,
+    orderId: ref.id,
+    operationId: "claim-reconcile",
+    expectedVersion: 1,
+    command: { type: "claim", stage: "advanceDry" },
+  });
+  const start = await store.execute("admin", {
+    action: "reconciliationStart",
+    eventId: manifest.eventId,
+    orderId: ref.id,
+    operationId: "review",
+    expectedVersion: 2,
+    reason: "Stock and instructions changed",
+  });
+  assert.ok("reconciliation" in start && start.reconciliation);
+  return { ref, fulfillment, order: start.reconciliation.order };
+}
+async function reconcilePreview(
+  order: FulfillmentOrder,
+  quantity = 3,
+  operationId = "revised",
+) {
+  return store.execute("admin", {
+    action: "reconciliationPreview",
+    eventId: manifest.eventId,
+    reviewId: "review",
+    operationId,
+    manifest: { ...order.manifest, notes: "Revised packing instructions" },
+    adjustments: [
+      {
+        lineId: "rice",
+        quantity,
+        available: 12,
+        reason: "Coordinator stock recount",
+      },
+    ],
+  });
+}
+const reconcileApply = (
+  packages: { id: string; disposition: string; note: string }[] = [],
+) =>
+  store.execute("admin", {
+    action: "reconciliationApply",
+    eventId: manifest.eventId,
+    previewId: "revised",
+    confirmed: true,
+    goodsAccountedFor: true,
+    stagingCleared: true,
+    workNote: "All loose goods counted and set aside for repacking",
+    packages,
+  });
+
+test("reconciliation holds work, resets packing, preserves original request and audits revised stock", async () => {
+  const { ref, fulfillment, order } = await reconciliationFixture();
+  await rejects(
+    "reconciliationPending",
+    fulfillment.execute("admin", {
+      eventId: manifest.eventId,
+      orderId: ref.id,
+      operationId: "bypass",
+      expectedVersion: 3,
+      command: { type: "control", state: "active", reason: "Bypass" },
+    }),
+  );
+  await reconcilePreview(order);
+  await reconcileApply();
+  const next = (await ref.get()).data()!;
+  assert.equal(next.version, 4);
+  assert.equal(next.control, "active");
+  assert.equal(next.reconciliationId, undefined);
+  assert.equal(next.portions.advanceDry.state, "queued");
+  assert.equal(next.portions.afterArrival.state, "waiting");
+  assert.equal(next.allocations.rice.quantity, 3);
+  assert.deepEqual(next.manifest.lines, order.manifest.lines);
+  assert.equal(
+    (await event().collection("allocationItems").doc("rice").get()).data()!
+      .allocated,
+    11,
+  );
+  assert.equal(
+    (await event().collection("reconciliations").doc("review").get()).data()!
+      .before.portions.advanceDry.state,
+    "picking",
+  );
+  await reconcileApply();
+  assert.equal((await ref.get()).data()!.version, 4);
+});
+
+test("reconciliation rejects stock overruns, inherited keys, remapping and stale budget changes", async () => {
+  const { order, ref } = await reconciliationFixture();
+  await rejects("allocationOverStock", reconcilePreview(order, 5));
+  await rejects(
+    "reconciliationAdjustment",
+    store.execute("admin", {
+      action: "reconciliationPreview",
+      eventId: manifest.eventId,
+      reviewId: "review",
+      operationId: "bad-key",
+      manifest: order.manifest,
+      adjustments: [
+        {
+          lineId: "constructor",
+          quantity: 1,
+          available: 12,
+          reason: "Invalid",
+        },
+      ],
+    }),
+  );
+  await rejects(
+    "reconciliationMapping",
+    store.execute("admin", {
+      action: "reconciliationPreview",
+      eventId: manifest.eventId,
+      reviewId: "review",
+      operationId: "bad-lines",
+      manifest: { ...order.manifest, lines: order.manifest.lines.slice(1) },
+      adjustments: [],
+    }),
+  );
+  await reconcilePreview(order);
+  await event()
+    .collection("allocationItems")
+    .doc("rice")
+    .update({ version: 99 });
+  await rejects("staleAllocation", reconcileApply());
+  assert.equal((await ref.get()).data()!.control, "held");
+  assert.equal((await ref.get()).data()!.allocations.rice.quantity, 4);
+});
+
+test("reconciliation cancellation restores work and preserves arrival received during review", async () => {
+  const { ref, order } = await reconciliationFixture();
+  const arrival = { id: "arrival-test", checkedInAt: now, priority: 1 };
+  await ref.update({ arrival, version: 4 });
+  await rejects(
+    "staleVersion",
+    store.execute("admin", {
+      action: "reconciliationCancel",
+      eventId: manifest.eventId,
+      reviewId: "review",
+      expectedVersion: 3,
+      goodsUnchanged: true,
+      reason: "No changes",
+    }),
+  );
+  await store.execute("admin", {
+    action: "reconciliationCancel",
+    eventId: manifest.eventId,
+    reviewId: "review",
+    expectedVersion: 4,
+    goodsUnchanged: true,
+    reason: "Original instructions confirmed",
+  });
+  const next = (await ref.get()).data()!;
+  assert.deepEqual(next.portions.advanceDry, order.portions.advanceDry);
+  assert.deepEqual(next.arrival, arrival);
+  assert.equal(next.portions.afterArrival.state, "queued");
+  assert.equal(next.control, "active");
+});
+
+test("reconciliation requires every package disposition and matching staging occupancy", async () => {
+  const { ref, order } = await reconciliationFixture();
+  const packages = [
+    {
+      id: "box-1",
+      stage: "advanceDry",
+      location: "A01",
+      custody: null,
+      handedOver: false,
+    },
+  ];
+  await ref.update({ packages });
+  const held = (await ref.get()).data() as FulfillmentOrder;
+  const location = event().collection("locations").doc(fulfillmentKey("A01"));
+  await location.set({
+    code: "A01",
+    count: 2,
+    orderId: ref.id,
+    active: true,
+    capacity: 3,
+  });
+  await reconcilePreview(held);
+  await rejects("reconciliationPackages", reconcileApply());
+  const dispositions = [
+    {
+      id: "box-1",
+      disposition: "retainedForRepack",
+      note: "Unpacked and contents counted",
+    },
+  ];
+  await rejects("locationCountConflict", reconcileApply(dispositions));
+  await location.update({ count: 1 });
+  await reconcileApply(dispositions);
+  assert.equal((await location.get()).data()!.count, 0);
+  assert.equal((await location.get()).data()!.orderId, null);
+  assert.deepEqual((await ref.get()).data()!.packages, []);
+  const audit = (
+    await ref.collection("activity").doc("reconciliation-apply-review").get()
+  ).data()!;
+  assert.deepEqual(audit.previous.packages, packages);
+  assert.deepEqual(audit.packages, dispositions);
+  assert.equal(order.arrival, null);
+});
+
+test("reconciliation expires previews, rechecks permissions and refuses custody or terminal orders", async () => {
+  const { ref, order } = await reconciliationFixture();
+  await reconcilePreview(order);
+  now = "2026-11-07T17:00:00Z";
+  await rejects("draftExpired", reconcileApply());
+  await event().collection("staff").doc("admin").update({ active: false });
+  await rejects("forbidden", reconcileApply());
+  await event().collection("staff").doc("admin").update({ active: true });
+  await store.execute("admin", {
+    action: "reconciliationCancel",
+    eventId: manifest.eventId,
+    reviewId: "review",
+    expectedVersion: 3,
+    goodsUnchanged: true,
+    reason: "No physical changes",
+  });
+  const start = {
+    action: "reconciliationStart",
+    eventId: manifest.eventId,
+    orderId: ref.id,
+    operationId: "second",
+    expectedVersion: 4,
+    reason: "Changed",
+  };
+  await ref.update({
+    packages: [{ id: "box", custody: { uid: "runner" }, handedOver: false }],
+  });
+  await rejects("reconciliationCustody", store.execute("admin", start));
+  await ref.update({ packages: [], control: "departed" });
+  await rejects("reconciliationTerminal", store.execute("admin", start));
 });

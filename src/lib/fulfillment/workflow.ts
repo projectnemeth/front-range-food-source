@@ -66,6 +66,10 @@ export function applyCommand(
   requireState(Number.isFinite(Date.parse(now)), "invalidTime");
   requireState(current.version === expectedVersion, "staleVersion");
   requireState(!current.deliveredAt, "alreadyDelivered");
+  requireState(
+    !current.reconciliationId || command.type === "arrival",
+    "reconciliationPending",
+  );
   const order = structuredClone(current);
   const coordinator = actor.role === "coordinator";
 

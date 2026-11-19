@@ -1,6 +1,6 @@
 # Phase Two fulfillment implementation status
 
-Updated November 18, 2026. Ninth development slice: approved allocations connected to packing quantities. Google metadata, headers, and a small selection of noncontact request cells were inspected read-only. No live import, deployment, or pilot integration occurred.
+Updated November 18, 2026. Tenth development slice: coordinator-reviewed reconciliation after packing starts. Google metadata, headers, and a small selection of noncontact request cells were inspected read-only. No live import, deployment, or pilot integration occurred.
 
 ## Latest packing-quantity milestone
 
@@ -51,7 +51,7 @@ Only the new, disabled-by-default Phase Two routes and APIs expose these workflo
 
 The dry workspace works against explicitly provisioned records; it is not ready for a live pilot without source mapping and operational setup. Its endpoint derives UID from verified credentials and role from the event grant. Coordinator setup now provisions isolated events, positions, and grants for existing accounts. Account creation, additional coordinator provisioning, real Google-column mapping, live reading, and ongoing source reconciliation remain outstanding. All tests and rehearsals operate in emulators only. No existing event is enabled by this work. The first interface is English, uses coordinator-supplied event IDs, and stages all dry packages for a portion at one position; expanded event selection, language support, and multiple-position entry remain later improvements.
 
-Live source import/reconciliation, changes to orders with existing work, standard-box walk-up manifests with unknown contents, package storage compatibility, exact item-to-package allocations, partial handoff/restock, moving/reassigning packages and work, and closeout are not implemented. The current command schema deliberately rejects partial handoff fields rather than treating them as full delivery. Approved shortages preserve supplied quantities in the resolution records; user-facing reduced/unserved outcome reporting remains to be built.
+Live source import/reconciliation, adding/removing/remapping lines on orders with existing work, standard-box walk-up manifests with unknown contents, package storage compatibility, exact item-to-package allocations, partial handoff/restock, moving/reassigning packages and work, and closeout are not implemented. The current command schema deliberately rejects partial handoff fields rather than treating them as full delivery. Approved shortages preserve supplied quantities in the resolution records; user-facing reduced/unserved outcome reporting remains to be built.
 
 The arrival operation consumes already validated logical arrivals in memory. No bridge credentials, outbox, retry service, printing changes, or Google-to-Firebase integration exist yet. These require the failure and authorization checks in the [implementation plan](fulfillment-implementation-plan.md).
 
@@ -85,3 +85,9 @@ All 39 unit tests and 36 emulator tests passed. All eight browser tests passed w
 ### November 18 allocation-to-packing verification
 
 All 41 unit tests passed. The full 41-case emulator suite passed, then the two additional household-binding/duplicate-item guard cases passed separately (43 emulator cases total). All eight browser tests passed after correcting explicit labels for the new linking selectors; the coordinator rehearsal includes applying the plan and picking its target quantity, plus mobile width checks. Standard TypeScript, lint and optimized build checks passed in the isolated dependency copy. The mobile linking preview was visually inspected. Pilot files, existing registration/order endpoints, Firebase rules and deployed settings were unchanged. No live import, Google write, push or deployment occurred.
+
+## Reconciliation slice
+
+Coordinator-reviewed full-order repacking now handles existing instruction and allocation changes after work begins. It holds work, requires physical goods and package accounting, checks stock across households, releases staging atomically and preserves arrival timing and audit history. See [procedure and limitations](fulfillment-reconciliation.md). Gathered/delivered corrections, new item selections and multi-order stock reductions remain outside this slice. The label pilot and deployed application remain unchanged.
+
+Validation for this slice: 42 unit tests, 48 emulator tests, type checking, lint and a production build passed. All eight browser regressions passed, including the reconciliation rehearsal and existing print routes; the reconciliation screen was visually reviewed.

@@ -329,4 +329,45 @@ test("coordinator prepares a disabled event, reviews an import and enables dry p
   expect(
     (await allocatedOrder.ref.get()).data()!.portions.afterArrival.state,
   ).toBe("waiting");
+  await page.goto("/staff/fulfillment/coordinator");
+  await page.getByLabel("Event ID", { exact: true }).fill(eventId);
+  await page.getByRole("button", { name: "Load event", exact: true }).click();
+  await page.getByLabel("Order ID to reconcile").fill(allocatedOrder.id);
+  await page.getByRole("button", { name: "Load order for review" }).click();
+  await page
+    .getByLabel("Reason for pausing this order")
+    .fill("Coordinator stock recount");
+  await page.getByRole("button", { name: "Pause for reconciliation" }).click();
+  await page
+    .getByLabel("Revised allocation for Rice", { exact: true })
+    .fill("2");
+  await page
+    .getByLabel("Allocation change reason for Rice")
+    .fill("Recount reduced this household share");
+  await page
+    .getByRole("button", { name: "Preview reconciliation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Reconciliation preview", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Picked goods and repack instructions")
+    .fill("Loose rice returned; repick two bags");
+  await page.getByLabel(/I accounted for all picked goods/).check();
+  await page.getByLabel(/I cleared this order’s staging positions/).check();
+  await page.screenshot({
+    path: test.info().outputPath("reconciliation-review.png"),
+    fullPage: true,
+  });
+  await page
+    .getByRole("button", { name: "Apply changes and restart packing" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Example A · active", exact: true }),
+  ).toBeVisible();
+  const reconciled = (await allocatedOrder.ref.get()).data()!;
+  expect(reconciled.allocations.rice.quantity).toBe(2);
+  expect(reconciled.portions.advanceDry.state).toBe("queued");
+  expect(reconciled.portions.afterArrival.state).toBe("waiting");
+  expect(reconciled.resolutions).toEqual({});
 });

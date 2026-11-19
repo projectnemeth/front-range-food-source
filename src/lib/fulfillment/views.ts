@@ -12,6 +12,8 @@ export type DrySummary = {
   household: string;
   version: number;
   control: FulfillmentOrder["control"];
+  holdReason: string | null;
+  reconciliationId: string | null;
   dry: Portion;
   packageCount: number;
   perishableCount: number;
@@ -46,6 +48,8 @@ export function drySummary(order: FulfillmentOrder): DrySummary {
     household: order.manifest.householdLabel,
     version: order.version,
     control: order.control,
+    holdReason: order.reason,
+    reconciliationId: order.reconciliationId ?? null,
     dry: order.portions.advanceDry,
     packageCount: order.packages.filter((pkg) => pkg.stage === "advanceDry")
       .length,

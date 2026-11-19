@@ -79,6 +79,7 @@ export type Package = {
   handedOver: boolean;
 };
 export type PackingAllocation = {
+  reconciliationId?: string;
   planId: string;
   itemId: string;
   householdKey: string;
@@ -88,6 +89,7 @@ export type PackingAllocation = {
   appliedAt: string;
 };
 export type FulfillmentOrder = {
+  reconciliationId?: string;
   allocations?: Record<string, PackingAllocation>;
   manifest: Manifest;
   version: number;

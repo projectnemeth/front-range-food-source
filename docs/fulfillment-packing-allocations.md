@@ -26,12 +26,16 @@ Perishable lines retain `afterArrival`. Allocating produce, chilled or frozen it
 
 Only active event coordinators can preview/apply. Planning and linking may occur while the separate Phase Two event is paused. Each apply rechecks role, event configuration, the latest approved item-plan revision, saved order fingerprints and household bindings inside one transaction. A competing claim, source edit, hold, arrival, packed box or completed delivery blocks the entire batch. An unchanged retry returns the saved result without applying twice; operation-ID reuse with altered preview input is rejected.
 
-Orders must be completely unstarted, including no resolutions. Multiple distinct item plans may be applied to the same unstarted order before picking begins. A line cannot receive a second allocation. Once an item plan is applied, new approval/release for that item is blocked until a future explicit reconciliation workflow exists. Approval of a replacement plan alone cannot silently alter quantities already released to picking.
+Orders must be completely unstarted, including no resolutions. Multiple distinct item plans may be applied to the same unstarted order before picking begins. A line cannot receive a second allocation. Once an item plan is applied, new approval/release for that item is blocked; use the separate coordinator reconciliation workflow to amend released targets. Approval of a replacement plan alone cannot silently alter quantities already released to picking.
 
-Changed-source imports also block orders with applied allocations, even if picking has not begun, so an import cannot discard the allocation record. Identical source reimports preserve it. This is conservative protection until allocation/source reconciliation is implemented.
+Changed-source imports also block orders with applied allocations, even if picking has not begun, so an import cannot discard the allocation record. Identical source reimports preserve it. Changes require the separate coordinator reconciliation workflow.
 
-This does not reserve or decrement inventory, infer source choices, create orders automatically, reconcile work in progress, or synchronize Google. Coordinators continue to manage physical stock and approve item identities/units. No plan can be released twice under this workflow, but the system does not detect the same physical stock entered under different item keys.
+This does not reserve or decrement inventory, infer source choices, create orders automatically or synchronize Google. Reconciliation of existing work is handled separately. Coordinators continue to manage physical stock and approve item identities/units. No plan can be released twice under this workflow, but the system does not detect the same physical stock entered under different item keys.
 
 ## Verification
 
 Domain tests check effective packing limits, unchanged original requests, preserved perishable gating, explicit zero confirmation and no empty delivery. Emulator cases cover atomic apply/retries, full-household linking, identity/unit mismatches, duplicate lines, persistent household bindings across items, stale plans/orders, expiry/revocation, source reimports and rollback when work starts. The browser rehearsal follows approved plan → linked order preview → applied targets → actual dry picking.
+
+## Reconciliation after packing begins
+
+A separate [coordinator-reviewed full-repack workflow](fulfillment-reconciliation.md) now handles changes to existing instructions and released allocation quantities. Ordinary import and allocation-release operations retain their existing protections. The original approved plan remains historical; current event budgets and per-order quantities include explicitly reviewed reconciliation adjustments. No live integration or pilot change is included.

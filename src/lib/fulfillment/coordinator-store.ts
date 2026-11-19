@@ -1,3 +1,4 @@
+import { ReconciliationStore } from "./reconciliation-store";
 import {
   allocationWorkUnstarted,
   type PackingAllocationDraft,
@@ -73,7 +74,20 @@ export class CoordinatorStore {
         this.event(eventId).collection("allocationItems").limit(201),
       );
       check(allocations.size <= 200, "setupLimitExceeded");
+      const reviews = await tx.get(
+        this.event(eventId)
+          .collection("reconciliations")
+          .where("status", "==", "open")
+          .limit(201),
+      );
+      check(reviews.size <= 200, "setupLimitExceeded");
       return {
+        reconciliations: reviews.docs.map((doc) => ({
+          id: doc.id,
+          orderId: doc.data().orderId,
+          household: doc.data().household,
+          reason: doc.data().reason,
+        })),
         allocations: allocations.docs.map(
           (doc) => doc.data() as AllocationSummary,
         ),
@@ -103,6 +117,14 @@ export class CoordinatorStore {
   }
   async execute(uid: string, input: unknown) {
     const command = coordinatorCommandSchema.parse(input);
+    if (
+      command.action === "reconciliationRead" ||
+      command.action === "reconciliationStart" ||
+      command.action === "reconciliationPreview" ||
+      command.action === "reconciliationApply" ||
+      command.action === "reconciliationCancel"
+    )
+      return new ReconciliationStore(this.db, this.clock).execute(uid, command);
     if (command.action === "preview") return this.preview(uid, command);
     if (command.action === "apply") return this.apply(uid, command);
     if (

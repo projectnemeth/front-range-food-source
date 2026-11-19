@@ -266,6 +266,12 @@ export default function AllocationPanel({
           <li key={plan.itemId}>
             {plan.item} ({plan.itemId}): {plan.allocated}/{plan.available}{" "}
             {plan.unit} · revision {plan.version}{" "}
+            {plan.reconciledAt && (
+              <span>
+                Targets/budget revised by reconciliation. The saved plan below
+                is the original approval.{" "}
+              </span>
+            )}
             <button
               disabled={disabled}
               onClick={() =>

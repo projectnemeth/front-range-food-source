@@ -1,5 +1,10 @@
 "use client";
 import Link from "next/link";
+import ReconciliationPanel from "./ReconciliationPanel";
+import type {
+  ReconciliationView,
+  ReconciliationPreview,
+} from "@/lib/fulfillment/reconciliation";
 import AllocationPanel from "./AllocationPanel";
 import PackingAllocationPanel from "./PackingAllocationPanel";
 import type {
@@ -18,6 +23,29 @@ import type {
 import styles from "../dry.module.css";
 
 const errors: Record<string, string> = {
+  reconciliationPending:
+    "This order already has an open reconciliation. Load it to continue.",
+  reconciliationTerminal:
+    "Cancelled, departed or delivered orders require a separate correction workflow.",
+  reconciliationCustody:
+    "Goods have been gathered or handed over. Confirm returns through a separate workflow before reworking them.",
+  reconciliationClosed: "This review is no longer open. Reload the order.",
+  reconciliationIdentity:
+    "Order, event and source identity must remain the same.",
+  reconciliationMapping:
+    "Keep the same item lines, units, preparation stages and storage classes. Mapping changes need a separate review.",
+  reconciliationAllocatedLine:
+    "Keep the original requested quantity for allocated items; use the allocation adjustment fields instead.",
+  reconciliationAdjustment:
+    "Allocation adjustments must name distinct existing allocated lines.",
+  reconciliationStock:
+    "The saved stock budget is inconsistent. No work was changed.",
+  reconciliationNoChange:
+    "Change an instruction or quantity before generating a preview, or abandon the review.",
+  reconciliationPackages:
+    "Record a disposition for every existing package exactly once.",
+  locationCountConflict:
+    "Staging counts changed or do not match this order. Verify the positions before proceeding.",
   allocationAlreadyReleased:
     "This item's plan is already applied to packing. Reconcile existing work before changing it.",
   allocationNotApproved: "Approve the allocation plan first.",
@@ -106,6 +134,10 @@ function CoordinatorWorkspace({
   const [packingCandidates, setPackingCandidates] = useState<
     PackingCandidate[] | null
   >(null);
+  const [reconciliation, setReconciliation] =
+    useState<ReconciliationView | null>(null);
+  const [reconciliationPreview, setReconciliationPreview] =
+    useState<ReconciliationPreview | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<CoordinatorCommand | null>(null);
@@ -136,6 +168,9 @@ function CoordinatorWorkspace({
       throw new Error(body.error);
     }
     setAllocationDraft((current) => (current?.eventId === id ? current : null));
+    setReconciliation((current) =>
+      current?.order.manifest.eventId === id ? current : null,
+    );
     setView(body);
     setEventId(id);
   };
@@ -183,7 +218,18 @@ function CoordinatorWorkspace({
         }
         return;
       }
-      if (body.packingDraft) {
+      if (body.reconciliation) {
+        setReconciliation(body.reconciliation);
+        setReconciliationPreview(null);
+        if (body.reconciliationFinished)
+          setMessage(
+            command.action === "reconciliationApply"
+              ? "Changes applied. Original work is audited; packing can restart."
+              : "Review ended. Original work preserved.",
+          );
+      } else if (body.reconciliationPreview) {
+        setReconciliationPreview(body.reconciliationPreview);
+      } else if (body.packingDraft) {
         setPackingDraft(body.packingDraft);
       } else if (body.packingApplied) {
         setPackingDraft(null);
@@ -468,6 +514,15 @@ function CoordinatorWorkspace({
               </form>
             </section>
           </div>
+          <ReconciliationPanel
+            key={`reconciliation-${view.event.id}`}
+            view={view}
+            current={reconciliation}
+            preview={reconciliationPreview}
+            disabled={disabled}
+            send={send}
+            clear={() => setReconciliationPreview(null)}
+          />
           <AllocationPanel
             key={view.event.id}
             view={view}

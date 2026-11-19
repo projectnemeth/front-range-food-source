@@ -80,6 +80,8 @@ export type AllocationDraft = {
   approvalFingerprint?: string;
 };
 export type AllocationSummary = {
+  reconciledAt?: string;
+  reconciliationId?: string;
   packingPlanId?: string;
   itemId: string;
   item: string;

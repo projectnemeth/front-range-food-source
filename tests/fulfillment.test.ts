@@ -1,3 +1,4 @@
+import { restartedOrder } from "../src/lib/fulfillment/reconciliation";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -482,4 +483,33 @@ test("zero allocation requires explicit confirmation, produces no package and ca
   order = run(order, { type: "arrival", arrival }, actors.bridge);
   assert.equal(readyForHandoff(order), false);
   assert.equal(order.manifest.lines[0].originalRequest, "Rice");
+});
+
+test("arrival during reconciliation stays held and full repack retains its check-in priority", () => {
+  const held = {
+    ...pack(make(), "advanceDry"),
+    control: "held" as const,
+    reconciliationId: "review",
+    reason: "Changed instructions",
+  };
+  fails("reconciliationPending", () =>
+    run(
+      held,
+      { type: "control", state: "active", reason: "Bypass" },
+      actors.coordinator,
+    ),
+  );
+  const checkedIn = arrive(held);
+  assert.equal(checkedIn.control, "held");
+  assert.equal(checkedIn.portions.afterArrival.state, "waiting");
+  const restarted = restartedOrder(
+    checkedIn,
+    checkedIn.manifest,
+    checkedIn.allocations,
+  );
+  assert.deepEqual(restarted.arrival, checkedIn.arrival);
+  assert.equal(restarted.portions.afterArrival.state, "queued");
+  assert.equal(restarted.portions.advanceDry.state, "queued");
+  assert.deepEqual(restarted.packages, []);
+  assert.deepEqual(restarted.resolutions, {});
 });
