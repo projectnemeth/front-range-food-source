@@ -1,4 +1,10 @@
 "use client";
+import { useState } from "react";
+import {
+  selectionTiming,
+  type ReconciliationAddition,
+} from "@/lib/fulfillment/reconciliation";
+import type { Line } from "@/lib/fulfillment/model";
 import type {
   CoordinatorCommand,
   CoordinatorView,
@@ -26,6 +32,12 @@ export default function ReconciliationPanel({
 }) {
   const order = current?.order,
     review = current?.review;
+  const scope = `${order?.manifest.id}-${review?.id}-${review?.status}`;
+  const [addedRows, setAddedRows] = useState<{ scope: string; ids: string[] }>({
+    scope: "",
+    ids: [],
+  });
+  const addedIds = addedRows.scope === scope ? addedRows.ids : [];
   const open = !!order?.reconciliationId && review?.status === "open";
   return (
     <section className={styles.panel}>
@@ -151,6 +163,28 @@ export default function ReconciliationPanel({
                   e.preventDefault();
                   if (disabled) return;
                   const data = new FormData(e.currentTarget);
+                  const additions = addedIds.map((id) => ({
+                    lineId: id,
+                    category: String(
+                      data.get(`new-category-${id}`),
+                    ) as ReconciliationAddition["category"],
+                    reason: String(data.get(`new-reason-${id}`)),
+                    stockConfirmed: true as const,
+                    ...(data.get(`new-stock-${id}`)
+                      ? { available: Number(data.get(`new-stock-${id}`)) }
+                      : {}),
+                  }));
+                  const newLines: Line[] = additions.map((a) => ({
+                    id: a.lineId,
+                    originalRequest: String(
+                      data.get(`new-request-${a.lineId}`),
+                    ),
+                    item: String(data.get(`new-item-${a.lineId}`)),
+                    quantity: Number(data.get(`new-quantity-${a.lineId}`)),
+                    unit: String(data.get(`new-unit-${a.lineId}`)),
+                    shelf: String(data.get(`new-shelf-${a.lineId}`)),
+                    ...selectionTiming(a.category),
+                  }));
                   const manifest = {
                     ...order.manifest,
                     householdLabel: String(data.get("household")),
@@ -160,13 +194,16 @@ export default function ReconciliationPanel({
                       ...order.manifest.source,
                       revision: String(data.get("revision")),
                     },
-                    lines: order.manifest.lines.map((line, i) => ({
-                      ...line,
-                      originalRequest: String(data.get(`request-${i}`)),
-                      quantity: order.allocations?.[line.id]
-                        ? line.quantity
-                        : Number(data.get(`requested-${i}`)),
-                    })),
+                    lines: [
+                      ...order.manifest.lines.map((line, i) => ({
+                        ...line,
+                        originalRequest: String(data.get(`request-${i}`)),
+                        quantity: order.allocations?.[line.id]
+                          ? line.quantity
+                          : Number(data.get(`requested-${i}`)),
+                      })),
+                      ...newLines,
+                    ],
                   };
                   const adjustments = Object.entries(
                     order.allocations ?? {},
@@ -194,6 +231,7 @@ export default function ReconciliationPanel({
                     reviewId: review.id,
                     operationId: crypto.randomUUID(),
                     manifest,
+                    additions,
                     adjustments,
                   });
                 }}
@@ -311,6 +349,156 @@ export default function ReconciliationPanel({
                       );
                     },
                   )}
+                  <h4>New item selections</h4>
+                  <p>
+                    Confirm the household’s new request and a quantity based on
+                    household size and available stock. Existing items must be
+                    edited above. Select a food category explicitly: only
+                    shelf-stable goods may be prepared before check-in.
+                  </p>
+                  <p>
+                    Use the exact item name and unit from an existing allocation
+                    budget when applicable. A budget must already be released to
+                    packing; its revised total stock must cover every household,
+                    including this new selection. Items without a plan use the
+                    manually reviewed quantity; this does not reserve inventory.
+                  </p>
+                  <ul>
+                    {view.allocations.map((a) => (
+                      <li key={a.itemId}>
+                        {a.item} · {a.unit} · {a.allocated}/{a.available}{" "}
+                        allocated ·{" "}
+                        {a.packingPlanId ? "Released" : "Not yet released"}
+                      </li>
+                    ))}
+                  </ul>
+                  {addedIds.map((id, i) => (
+                    <fieldset key={id} className={styles.form}>
+                      <legend>New selection {i + 1}</legend>
+                      <label>
+                        New selection {i + 1} request
+                        <input
+                          name={`new-request-${id}`}
+                          required
+                          maxLength={2000}
+                        />
+                      </label>
+                      <label>
+                        New selection {i + 1} item
+                        <input
+                          name={`new-item-${id}`}
+                          required
+                          maxLength={2000}
+                        />
+                      </label>
+                      <label>
+                        New selection {i + 1} quantity
+                        <input
+                          name={`new-quantity-${id}`}
+                          type="number"
+                          min={1}
+                          max={10000}
+                          required
+                        />
+                      </label>
+                      <label>
+                        New selection {i + 1} unit
+                        <input
+                          name={`new-unit-${id}`}
+                          required
+                          maxLength={160}
+                        />
+                      </label>
+                      <label>
+                        New selection {i + 1} shelf
+                        <input
+                          name={`new-shelf-${id}`}
+                          required
+                          maxLength={160}
+                        />
+                      </label>
+                      <label>
+                        New selection {i + 1} category
+                        <select
+                          name={`new-category-${id}`}
+                          aria-label={`New selection ${i + 1} category`}
+                          defaultValue=""
+                          required
+                        >
+                          <option value="">Choose preparation category</option>
+                          <option value="shelfStable">
+                            Shelf-stable — advance dry packing
+                          </option>
+                          <option value="produce">
+                            Produce — after check-in
+                          </option>
+                          <option value="refrigerated">
+                            Refrigerated — after check-in
+                          </option>
+                          <option value="frozen">
+                            Frozen — after check-in
+                          </option>
+                          <option value="otherPerishable">
+                            Other perishable — after check-in
+                          </option>
+                        </select>
+                      </label>
+                      <label>
+                        New selection {i + 1} revised total stock
+                        <input
+                          name={`new-stock-${id}`}
+                          type="number"
+                          min={0}
+                          max={10000}
+                        />
+                      </label>
+                      <p>
+                        Required for an item with an allocation budget. Leave
+                        blank for items without a plan.
+                      </p>
+                      <label>
+                        New selection {i + 1} review reason
+                        <input
+                          name={`new-reason-${id}`}
+                          required
+                          maxLength={2000}
+                        />
+                      </label>
+                      <label>
+                        <input type="checkbox" required /> I verified the new
+                        request, item identity, household quantity, available
+                        stock and preparation category for selection {i + 1}.
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          clear();
+                          setAddedRows({
+                            scope,
+                            ids: addedIds.filter((key) => key !== id),
+                          });
+                        }}
+                      >
+                        Remove new selection {i + 1}
+                      </button>
+                    </fieldset>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={
+                      addedIds.length >= 100 ||
+                      order.manifest.lines.length + addedIds.length >= 200
+                    }
+                    onClick={() => {
+                      clear();
+                      setAddedRows({
+                        scope,
+                        ids: [...addedIds, `new-${crypto.randomUUID()}`],
+                      });
+                    }}
+                  >
+                    Add new item selection
+                  </button>
                   <button>Preview reconciliation</button>
                 </fieldset>
               </form>
@@ -363,10 +551,44 @@ export default function ReconciliationPanel({
                         {line.item}:{" "}
                         {order.manifest.lines.find((l) => l.id === line.id)
                           ?.quantity ?? "new"}{" "}
-                        → {line.quantity} {line.unit} · {line.stage} · Request:{" "}
-                        {line.originalRequest}
+                        → {line.quantity} {line.unit} ·{" "}
+                        {line.stage === "advanceDry"
+                          ? "Advance dry"
+                          : "After check-in"}{" "}
+                        · Request: {line.originalRequest}
                       </li>
                     ))}
+                  </ul>
+                  <h4>New selections to include in repacking</h4>
+                  <ul>
+                    {(preview.additions ?? []).map((a) => {
+                      const line = preview.manifest.lines.find(
+                        (line) => line.id === a.lineId,
+                      )!;
+                      return (
+                        <li key={a.lineId}>
+                          NEW: {line.item} · {line.quantity} {line.unit} ·{" "}
+                          {line.shelf} ·{" "}
+                          {line.stage === "advanceDry"
+                            ? "Advance dry"
+                            : "After check-in"}{" "}
+                          ·{" "}
+                          {
+                            {
+                              shelfStable: "Shelf-stable",
+                              produce: "Produce",
+                              refrigerated: "Refrigerated",
+                              frozen: "Frozen",
+                              otherPerishable: "Other perishable",
+                            }[a.category]
+                          }
+                          . {a.reason}
+                          {a.budget
+                            ? ` Event allocation: ${a.budget.previousAllocated} → ${a.budget.previousAllocated + a.budget.quantity}; reviewed stock ${a.budget.available}.`
+                            : " Quantity and stock manually reviewed; no allocation plan."}
+                        </li>
+                      );
+                    })}
                   </ul>
                   <ul>
                     {preview.adjustments.map((a) => (

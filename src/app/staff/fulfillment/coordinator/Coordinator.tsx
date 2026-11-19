@@ -33,7 +33,15 @@ const errors: Record<string, string> = {
   reconciliationIdentity:
     "Order, event and source identity must remain the same.",
   reconciliationMapping:
-    "Keep the same item lines, units, preparation stages and storage classes. Mapping changes need a separate review.",
+    "Keep existing lines and their item identities, units, preparation stages and storage classes. Add new selections separately.",
+  reconciliationSelections:
+    "Every added line needs exactly one new-selection review. Reload and review the new selections.",
+  reconciliationSelectionTiming:
+    "The new item’s preparation timing and storage must match its reviewed food category.",
+  reconciliationDuplicateItem:
+    "This item is already on the order. Edit its existing quantity instead of adding another line.",
+  reconciliationSelectionBudget:
+    "Match the existing item name and unit, release its allocation plan first, and enter the reviewed total stock. Ambiguous item budgets need correction before adding this selection.",
   reconciliationAllocatedLine:
     "Keep the original requested quantity for allocated items; use the allocation adjustment fields instead.",
   reconciliationAdjustment:

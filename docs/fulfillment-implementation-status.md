@@ -1,6 +1,6 @@
 # Phase Two fulfillment implementation status
 
-Updated November 18, 2026. Tenth development slice: coordinator-reviewed reconciliation after packing starts. Google metadata, headers, and a small selection of noncontact request cells were inspected read-only. No live import, deployment, or pilot integration occurred.
+Updated November 19, 2026. Eleventh development slice: new selections during coordinator-reviewed reconciliation. Google metadata, headers, and a small selection of noncontact request cells were inspected read-only. No live import, deployment, or pilot integration occurred.
 
 ## Latest packing-quantity milestone
 
@@ -51,7 +51,7 @@ Only the new, disabled-by-default Phase Two routes and APIs expose these workflo
 
 The dry workspace works against explicitly provisioned records; it is not ready for a live pilot without source mapping and operational setup. Its endpoint derives UID from verified credentials and role from the event grant. Coordinator setup now provisions isolated events, positions, and grants for existing accounts. Account creation, additional coordinator provisioning, real Google-column mapping, live reading, and ongoing source reconciliation remain outstanding. All tests and rehearsals operate in emulators only. No existing event is enabled by this work. The first interface is English, uses coordinator-supplied event IDs, and stages all dry packages for a portion at one position; expanded event selection, language support, and multiple-position entry remain later improvements.
 
-Live source import/reconciliation, adding/removing/remapping lines on orders with existing work, standard-box walk-up manifests with unknown contents, package storage compatibility, exact item-to-package allocations, partial handoff/restock, moving/reassigning packages and work, and closeout are not implemented. The current command schema deliberately rejects partial handoff fields rather than treating them as full delivery. Approved shortages preserve supplied quantities in the resolution records; user-facing reduced/unserved outcome reporting remains to be built.
+Live source import/reconciliation, removing/remapping existing lines on orders with work, standard-box walk-up manifests with unknown contents, package storage compatibility, exact item-to-package allocations, partial handoff/restock, moving/reassigning packages and work, and closeout are not implemented. The current command schema deliberately rejects partial handoff fields rather than treating them as full delivery. Approved shortages preserve supplied quantities in the resolution records; user-facing reduced/unserved outcome reporting remains to be built.
 
 The arrival operation consumes already validated logical arrivals in memory. No bridge credentials, outbox, retry service, printing changes, or Google-to-Firebase integration exist yet. These require the failure and authorization checks in the [implementation plan](fulfillment-implementation-plan.md).
 
@@ -88,6 +88,14 @@ All 41 unit tests passed. The full 41-case emulator suite passed, then the two a
 
 ## Reconciliation slice
 
-Coordinator-reviewed full-order repacking now handles existing instruction and allocation changes after work begins. It holds work, requires physical goods and package accounting, checks stock across households, releases staging atomically and preserves arrival timing and audit history. See [procedure and limitations](fulfillment-reconciliation.md). Gathered/delivered corrections, new item selections and multi-order stock reductions remain outside this slice. The label pilot and deployed application remain unchanged.
+Coordinator-reviewed full-order repacking now handles existing instruction and allocation changes after work begins. It holds work, requires physical goods and package accounting, checks stock across households, releases staging atomically and preserves arrival timing and audit history. See [procedure and limitations](fulfillment-reconciliation.md). Gathered/delivered corrections and multi-order stock reductions remain outside this slice. The label pilot and deployed application remain unchanged.
 
 Validation for this slice: 42 unit tests, 48 emulator tests, type checking, lint and a production build passed. All eight browser regressions passed, including the reconciliation rehearsal and existing print routes; the reconciliation screen was visually reviewed.
+
+## New-selection slice
+
+Coordinators can now append explicitly reviewed selections during a held reconciliation, with item identity, quantity, unit, shelf, food category, stock confirmation and reason. Existing item identities remain protected; duplicate item additions are rejected. Shelf-stable items enter dry work, while produce and other perishables remain gated by check-in. Released item budgets include the added share atomically and reject concurrent overspending. Items without a plan use manually reviewed quantities without inventory reservation. See [procedure and boundaries](fulfillment-reconciliation.md).
+
+The label/check-in pilot, production deployment and Google sources remain unchanged. This implementation remains behind the default-off Phase Two gate.
+
+Validation for the new-selection slice: 42 unit tests and all 55 emulator cases passed (54 in the full run, plus the additional household-binding case in a focused run). All eight browser regressions passed, including new dry/produce selections, post-apply dry picking and existing print routes. Type checking, zero-warning lint and the production build passed. The mobile reconciliation screen was visually reviewed. No pilot files, production data or deployment configuration changed.

@@ -344,12 +344,55 @@ test("coordinator prepares a disabled event, reviews an import and enables dry p
   await page
     .getByLabel("Allocation change reason for Rice")
     .fill("Recount reduced this household share");
+  for (const [i, item, category, shelf] of [
+    [1, "Pasta", "shelfStable", "Pantry 02"],
+    [2, "Pears", "produce", "Produce 02"],
+  ] as const) {
+    await page
+      .getByRole("button", { name: "Add new item selection", exact: true })
+      .click();
+    await page
+      .getByLabel(`New selection ${i} request`, { exact: true })
+      .fill(`Please add ${item}`);
+    await page
+      .getByLabel(`New selection ${i} item`, { exact: true })
+      .fill(item);
+    await page
+      .getByLabel(`New selection ${i} quantity`, { exact: true })
+      .fill("2");
+    await page
+      .getByLabel(`New selection ${i} unit`, { exact: true })
+      .fill("bag");
+    await page
+      .getByLabel(`New selection ${i} shelf`, { exact: true })
+      .fill(shelf);
+    await page
+      .getByLabel(`New selection ${i} category`, { exact: true })
+      .selectOption(category);
+    await page
+      .getByLabel(`New selection ${i} review reason`, { exact: true })
+      .fill("New request confirmed; household quantity and stock checked");
+    await page
+      .getByLabel(
+        `I verified the new request, item identity, household quantity, available stock and preparation category for selection ${i}.`,
+        { exact: true },
+      )
+      .check();
+  }
   await page
     .getByRole("button", { name: "Preview reconciliation", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Reconciliation preview", exact: true }),
   ).toBeVisible();
+  await expect(page.getByText(/NEW: Pasta/)).toContainText("Advance dry");
+  await expect(page.getByText(/NEW: Pears/)).toContainText("After check-in");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: test.info().outputPath("new-selections-mobile.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page
     .getByLabel("Picked goods and repack instructions")
     .fill("Loose rice returned; repick two bags");
@@ -370,4 +413,27 @@ test("coordinator prepares a disabled event, reviews an import and enables dry p
   expect(reconciled.portions.advanceDry.state).toBe("queued");
   expect(reconciled.portions.afterArrival.state).toBe("waiting");
   expect(reconciled.resolutions).toEqual({});
+  expect(
+    reconciled.manifest.lines.find(
+      (line: { item: string }) => line.item === "Pasta",
+    ).stage,
+  ).toBe("advanceDry");
+  expect(
+    reconciled.manifest.lines.find(
+      (line: { item: string }) => line.item === "Pears",
+    ).stage,
+  ).toBe("afterArrival");
+  await page.goto("/staff/fulfillment");
+  await page.getByLabel("Pickup event ID").fill(eventId);
+  await page.getByRole("button", { name: "Open event", exact: true }).click();
+  await page.getByRole("button", { name: /Example A/ }).click();
+  await page
+    .getByRole("button", { name: "Claim dry portion", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Picked Pasta", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Picked Pears", exact: true }),
+  ).toHaveCount(0);
 });

@@ -4,6 +4,9 @@ import { fulfillmentKey } from "./store";
 import { WorkflowError } from "./workflow";
 import {
   restartedOrder,
+  selectionTiming,
+  itemIdentity,
+  type ReconciliationAddition,
   type ReconciliationCommand,
   type ReconciliationReview,
   type ReconciliationPreview,
@@ -266,10 +269,9 @@ export class ReconciliationStore {
           "reconciliationIdentity",
         );
         check(
-          proposed.lines.length === original.lines.length &&
-            proposed.lines.every((line) =>
-              original.lines.some((old) => old.id === line.id),
-            ),
+          original.lines.every((old) =>
+            proposed.lines.some((line) => line.id === old.id),
+          ),
           "reconciliationMapping",
         );
         for (const oldLine of original.lines) {
@@ -289,6 +291,88 @@ export class ReconciliationStore {
           check(
             line && line.quantity === previous.quantity,
             "reconciliationAllocatedLine",
+          );
+        }
+        const newLines = proposed.lines.filter(
+          (line) => !original.lines.some((old) => old.id === line.id),
+        );
+        check(
+          command.additions.length === newLines.length &&
+            new Set(command.additions.map((a) => a.lineId)).size ===
+              newLines.length &&
+            command.additions.every((a) =>
+              newLines.some((line) => line.id === a.lineId),
+            ),
+          "reconciliationSelections",
+        );
+        const catalog = newLines.length
+          ? await tx.get(event.collection("allocationItems").limit(201))
+          : null;
+        check(!catalog || catalog.size <= 200, "setupLimitExceeded");
+        const householdKey =
+          Object.values(current.allocations ?? {})[0]?.householdKey ??
+          original.source.key;
+        const additions: ReconciliationAddition[] = command.additions.map(
+          (a) => {
+            const line = newLines.find((line) => line.id === a.lineId)!;
+            const timing = selectionTiming(a.category);
+            check(
+              line.stage === timing.stage && line.storage === timing.storage,
+              "reconciliationSelectionTiming",
+            );
+            check(
+              proposed.lines.filter(
+                (other) => itemIdentity(other.item) === itemIdentity(line.item),
+              ).length === 1,
+              "reconciliationDuplicateItem",
+            );
+            const matches = catalog!.docs.filter(
+              (doc) =>
+                itemIdentity(doc.data().item) === itemIdentity(line.item),
+            );
+            check(matches.length <= 1, "reconciliationSelectionBudget");
+            if (!matches.length) return { ...a, budget: null };
+            const item = matches[0].data();
+            check(
+              itemIdentity(item.unit) === itemIdentity(line.unit) &&
+                item.packingPlanId &&
+                a.available !== undefined,
+              "reconciliationSelectionBudget",
+            );
+            check(
+              !Object.values(current.allocations ?? {}).some(
+                (old) => old.itemId === matches[0].id,
+              ),
+              "reconciliationDuplicateItem",
+            );
+            check(
+              item.allocated + line.quantity <= a.available,
+              "allocationOverStock",
+            );
+            return {
+              ...a,
+              budget: {
+                itemId: matches[0].id,
+                planId: item.packingPlanId,
+                householdKey,
+                itemVersion: item.version,
+                previousAvailable: item.available,
+                previousAllocated: item.allocated,
+                available: a.available,
+                quantity: line.quantity,
+              },
+            };
+          },
+        );
+        if (additions.some((a) => a.budget)) {
+          const binding = await tx.get(
+            event
+              .collection("allocationHouseholds")
+              .doc(fulfillmentKey(householdKey)),
+          );
+          check(
+            !binding.exists || binding.data()!.orderId === original.id,
+            "packingHouseholdMismatch",
           );
         }
         check(
@@ -358,6 +442,7 @@ export class ReconciliationStore {
           fingerprint,
           expiresAt: new Date(Date.parse(now) + 30 * 60 * 1000).toISOString(),
           manifest: proposed,
+          additions,
           adjustments,
           appliedAt: null,
         };
@@ -415,9 +500,76 @@ export class ReconciliationStore {
         event.collection("allocationItems").doc(a.itemId),
       );
       const items = itemRefs.length ? await tx.getAll(...itemRefs) : [];
+      const additions = preview.additions ?? [];
+      const addedBudgets = additions.flatMap((a) =>
+        a.budget ? [{ ...a.budget, lineId: a.lineId }] : [],
+      );
+      // Recheck the catalogue even for manually reviewed items: a newly created plan must not be bypassed.
+      const catalog = additions.length
+        ? await tx.get(event.collection("allocationItems").limit(201))
+        : null;
+      check(!catalog || catalog.size <= 200, "setupLimitExceeded");
+      for (const a of additions) {
+        const line = preview.manifest.lines.find(
+          (line) => line.id === a.lineId,
+        )!;
+        const matches = catalog!.docs.filter(
+          (doc) => itemIdentity(doc.data().item) === itemIdentity(line.item),
+        );
+        check(
+          a.budget
+            ? matches.length === 1 && matches[0].id === a.budget.itemId
+            : matches.length === 0,
+          "staleAllocation",
+        );
+        if (a.budget) {
+          const item = matches[0].data(),
+            b = a.budget;
+          check(
+            item.version === b.itemVersion &&
+              item.allocated === b.previousAllocated &&
+              item.available === b.previousAvailable &&
+              item.packingPlanId === b.planId &&
+              itemIdentity(item.unit) === itemIdentity(line.unit),
+            "staleAllocation",
+          );
+          check(
+            item.allocated + b.quantity <= b.available,
+            "allocationOverStock",
+          );
+        }
+      }
+      const householdKeys = [
+        ...new Set(addedBudgets.map((b) => b.householdKey)),
+      ];
+      const bindingRefs = householdKeys.map((key) =>
+        event.collection("allocationHouseholds").doc(fulfillmentKey(key)),
+      );
+      const bindings = bindingRefs.length
+        ? await tx.getAll(...bindingRefs)
+        : [];
+      bindings.forEach((binding) =>
+        check(
+          !binding.exists || binding.data()!.orderId === current.manifest.id,
+          "packingHouseholdMismatch",
+        ),
+      );
       const allocations = current.allocations
         ? structuredClone(current.allocations)
-        : undefined;
+        : addedBudgets.length
+          ? {}
+          : undefined;
+      for (const b of addedBudgets)
+        allocations![b.lineId] = {
+          planId: b.planId,
+          itemId: b.itemId,
+          householdKey: b.householdKey,
+          quantity: b.quantity,
+          reconciliationId: review.id,
+          approvedBy: uid,
+          appliedBy: uid,
+          appliedAt: now,
+        };
       preview.adjustments.forEach((a, i) => {
         const item = items[i].data();
         check(
@@ -447,6 +599,22 @@ export class ReconciliationStore {
         finishedAt: now,
         finishFingerprint: fingerprint,
       };
+      bindingRefs.forEach((binding, i) => {
+        if (!bindings[i].exists)
+          tx.create(binding, {
+            householdKey: householdKeys[i],
+            orderId: current.manifest.id,
+          });
+      });
+      addedBudgets.forEach((b) =>
+        tx.update(event.collection("allocationItems").doc(b.itemId), {
+          available: b.available,
+          allocated: b.previousAllocated + b.quantity,
+          version: b.itemVersion + 1,
+          reconciledAt: now,
+          reconciliationId: review.id,
+        }),
+      );
       tx.set(ref, next);
       tx.set(reviewRef, finished);
       tx.update(previewRef, { appliedAt: now, applyFingerprint: fingerprint });
@@ -475,6 +643,7 @@ export class ReconciliationStore {
           previous: current,
           manifest: next.manifest,
           adjustments: preview.adjustments,
+          additions,
           packages: command.packages,
           workNote: command.workNote,
           goodsAccountedFor: true,

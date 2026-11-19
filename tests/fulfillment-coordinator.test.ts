@@ -9,9 +9,17 @@ import { adminAuth, adminDb } from "../src/lib/firebase-admin";
 import { CoordinatorStore } from "../src/lib/fulfillment/coordinator-store";
 import { FulfillmentStore, fulfillmentKey } from "../src/lib/fulfillment/store";
 import { WorkflowError } from "../src/lib/fulfillment/workflow";
-import { manifest } from "./fixtures/fulfillment";
+import { manifest, arrival } from "./fixtures/fulfillment";
+import {
+  selectionTiming,
+  type ReconciliationAddition,
+} from "../src/lib/fulfillment/reconciliation";
 import { GET, POST } from "../src/app/api/fulfillment/coordinator/route";
-import type { FulfillmentOrder, Manifest } from "../src/lib/fulfillment/model";
+import type {
+  FulfillmentOrder,
+  Line,
+  Manifest,
+} from "../src/lib/fulfillment/model";
 
 let env: RulesTestEnvironment;
 let now = "2026-11-07T16:00:00Z";
@@ -1136,4 +1144,336 @@ test("reconciliation expires previews, rechecks permissions and refuses custody 
   await rejects("reconciliationCustody", store.execute("admin", start));
   await ref.update({ packages: [], control: "departed" });
   await rejects("reconciliationTerminal", store.execute("admin", start));
+});
+
+const selectedLine = (
+  category: ReconciliationAddition["category"] = "shelfStable",
+  item = "Beans",
+): Line => ({
+  id: `new-${category}`,
+  originalRequest: `Please add ${item}`,
+  item,
+  quantity: 3,
+  unit: "can",
+  shelf: "Reviewed shelf",
+  ...selectionTiming(category),
+});
+const selectionReview = (
+  line: Line,
+  category: ReconciliationAddition["category"] = "shelfStable",
+  available?: number,
+) => ({
+  lineId: line.id,
+  category,
+  reason: "Household requested this item; quantity and stock reviewed",
+  stockConfirmed: true as const,
+  ...(available === undefined ? {} : { available }),
+});
+const selectionPreview = (
+  order: FulfillmentOrder,
+  lines = [selectedLine()],
+  additions = lines.map((line) => selectionReview(line)),
+  operationId = "revised",
+  reviewId = "review",
+) =>
+  store.execute("admin", {
+    action: "reconciliationPreview",
+    eventId: manifest.eventId,
+    reviewId,
+    operationId,
+    manifest: { ...order.manifest, lines: [...order.manifest.lines, ...lines] },
+    adjustments: [],
+    additions,
+  });
+const beanBudget = () => event().collection("allocationItems").doc("beans");
+const seedBeanBudget = (available = 10) =>
+  beanBudget().set({
+    itemId: "beans",
+    item: "Beans",
+    unit: "can",
+    allocated: 0,
+    available,
+    version: 1,
+    draftId: "beans-approved",
+    packingPlanId: "beans-approved",
+  });
+
+test("new shelf-stable and perishable selections survive full repack with explicit review audit", async () => {
+  const { order, ref } = await reconciliationFixture();
+  const categories = [
+    "shelfStable",
+    "produce",
+    "refrigerated",
+    "frozen",
+    "otherPerishable",
+  ] as const;
+  const lines = categories.map((category) =>
+    selectedLine(category, `New ${category} item`),
+  );
+  await selectionPreview(
+    order,
+    lines,
+    lines.map((line, i) => selectionReview(line, categories[i])),
+  );
+  assert.equal(
+    (await ref.get()).data()!.manifest.lines.length,
+    order.manifest.lines.length,
+  );
+  await reconcileApply();
+  const next = (await ref.get()).data()!;
+  assert.deepEqual(next.manifest.lines.slice(-5), lines);
+  assert.equal(next.portions.advanceDry.state, "queued");
+  assert.equal(next.portions.afterArrival.state, "waiting");
+  assert.deepEqual(next.allocations, order.allocations);
+  const audit = (
+    await ref.collection("activity").doc("reconciliation-apply-review").get()
+  ).data()!;
+  assert.equal(audit.additions.length, 5);
+  assert.equal(audit.additions[1].category, "produce");
+  assert.equal(audit.additions[0].stockConfirmed, true);
+  assert.deepEqual(audit.previous.manifest, order.manifest);
+  await reconcileApply();
+  assert.equal(
+    (await ref.get()).data()!.manifest.lines.length,
+    order.manifest.lines.length + 5,
+  );
+});
+
+test("new selections require review, unique item identity and correct perishable timing", async () => {
+  const { order } = await reconciliationFixture();
+  const line = selectedLine();
+  await rejects(
+    "reconciliationSelections",
+    selectionPreview(order, [line], []),
+  );
+  await rejects(
+    "reconciliationSelections",
+    selectionPreview(
+      order,
+      [line],
+      [selectionReview(line), selectionReview(line)],
+    ),
+  );
+  await rejects(
+    "reconciliationSelectionTiming",
+    selectionPreview(order, [line], [selectionReview(line, "produce")]),
+  );
+  const duplicate = { ...line, item: "  RICE  ", unit: "different-unit" };
+  await rejects(
+    "reconciliationDuplicateItem",
+    selectionPreview(order, [duplicate]),
+  );
+  await assert.rejects(
+    selectionPreview(order, [{ ...line, id: "constructor" }]),
+    { name: "ZodError" },
+  );
+  await assert.rejects(
+    store.execute("admin", {
+      action: "reconciliationPreview",
+      eventId: manifest.eventId,
+      reviewId: "review",
+      operationId: "invalid-confirmation",
+      manifest: { ...order.manifest, lines: [...order.manifest.lines, line] },
+      adjustments: [],
+      additions: [{ ...selectionReview(line), stockConfirmed: false }],
+    }),
+    { name: "ZodError" },
+  );
+  await assert.rejects(
+    selectionPreview(order, [{ ...line, storage: "chilled" }]),
+    { name: "ZodError" },
+  );
+});
+
+test("new planned selection adds its share to the released event budget and remains adjustable", async () => {
+  const { order, ref } = await reconciliationFixture();
+  await seedBeanBudget();
+  const line = selectedLine();
+  await rejects("reconciliationSelectionBudget", selectionPreview(order));
+  await rejects(
+    "allocationOverStock",
+    selectionPreview(order, [line], [selectionReview(line, "shelfStable", 2)]),
+  );
+  await rejects(
+    "reconciliationSelectionBudget",
+    selectionPreview(
+      order,
+      [{ ...line, unit: "box" }],
+      [selectionReview(line, "shelfStable", 10)],
+    ),
+  );
+  await selectionPreview(
+    order,
+    [line],
+    [selectionReview(line, "shelfStable", 10)],
+  );
+  await reconcileApply();
+  const next = (await ref.get()).data() as FulfillmentOrder;
+  assert.equal(next.allocations![line.id].quantity, 3);
+  assert.equal(next.allocations![line.id].householdKey, "a");
+  assert.equal((await beanBudget().get()).data()!.allocated, 3);
+  await reconcileApply();
+  assert.equal((await beanBudget().get()).data()!.allocated, 3);
+  await store.execute("admin", {
+    action: "reconciliationStart",
+    eventId: manifest.eventId,
+    orderId: ref.id,
+    operationId: "second-review",
+    expectedVersion: next.version,
+    reason: "Recount",
+  });
+  await store.execute("admin", {
+    action: "reconciliationPreview",
+    eventId: manifest.eventId,
+    reviewId: "second-review",
+    operationId: "second-preview",
+    manifest: next.manifest,
+    adjustments: [
+      { lineId: line.id, quantity: 2, available: 10, reason: "Reduced stock" },
+    ],
+  });
+  await store.execute("admin", {
+    action: "reconciliationApply",
+    eventId: manifest.eventId,
+    previewId: "second-preview",
+    confirmed: true,
+    goodsAccountedFor: true,
+    stagingCleared: true,
+    workNote: "No additional goods moved",
+    packages: [],
+  });
+  assert.equal((await beanBudget().get()).data()!.allocated, 2);
+});
+
+test("concurrent new selections cannot spend the same released stock twice", async () => {
+  const { order } = await reconciliationFixture();
+  await seedBeanBudget(4);
+  const orders = await adminDb
+    .collection("fulfillmentOrders")
+    .where("manifest.eventId", "==", manifest.eventId)
+    .get();
+  const other = orders.docs.find((doc) => doc.id !== order.manifest.id)!;
+  const started = await store.execute("admin", {
+    action: "reconciliationStart",
+    eventId: manifest.eventId,
+    orderId: other.id,
+    operationId: "other-review",
+    expectedVersion: other.data().version,
+    reason: "Additional selection",
+  });
+  assert.ok("reconciliation" in started && started.reconciliation);
+  const line = selectedLine(),
+    additions = [selectionReview(line, "shelfStable", 4)];
+  await selectionPreview(order, [line], additions);
+  await selectionPreview(
+    started.reconciliation.order,
+    [line],
+    additions,
+    "other-preview",
+    "other-review",
+  );
+  const results = await Promise.allSettled([
+    reconcileApply(),
+    store.execute("admin", {
+      action: "reconciliationApply",
+      eventId: manifest.eventId,
+      previewId: "other-preview",
+      confirmed: true,
+      goodsAccountedFor: true,
+      stagingCleared: true,
+      workNote: "Goods reviewed",
+      packages: [],
+    }),
+  ]);
+  assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+  const failure = results.find(
+    (r) => r.status === "rejected",
+  ) as PromiseRejectedResult;
+  assert.equal(failure.reason.code, "staleAllocation");
+  assert.equal((await beanBudget().get()).data()!.allocated, 3);
+});
+
+test("new plans or arrivals after selection preview force fresh review and cancellation adds nothing", async () => {
+  const { order, ref } = await reconciliationFixture();
+  await selectionPreview(order);
+  await seedBeanBudget();
+  await rejects("staleAllocation", reconcileApply());
+  await ref.update({ arrival, version: order.version + 1 });
+  await rejects("stalePreview", reconcileApply());
+  await store.execute("admin", {
+    action: "reconciliationCancel",
+    eventId: manifest.eventId,
+    reviewId: "review",
+    expectedVersion: order.version + 1,
+    goodsUnchanged: true,
+    reason: "Selection withdrawn before goods moved",
+  });
+  assert.deepEqual((await ref.get()).data()!.manifest, order.manifest);
+  assert.equal((await beanBudget().get()).data()!.allocated, 0);
+});
+
+test("new perishable selection on a checked-in dry-only order queues only after reviewed apply", async () => {
+  const { order, ref } = await reconciliationFixture();
+  const dryOnly = {
+    ...order.manifest,
+    lines: order.manifest.lines.filter((line) => line.stage === "advanceDry"),
+  };
+  await ref.update({
+    manifest: dryOnly,
+    arrival,
+    "portions.afterArrival": { state: "notRequired", owner: null },
+  });
+  const current = (await ref.get()).data() as FulfillmentOrder;
+  const line = selectedLine("produce", "Pears");
+  await selectionPreview(current, [line], [selectionReview(line, "produce")]);
+  assert.equal(
+    (await ref.get()).data()!.portions.afterArrival.state,
+    "notRequired",
+  );
+  await reconcileApply();
+  assert.equal((await ref.get()).data()!.portions.afterArrival.state, "queued");
+  assert.deepEqual((await ref.get()).data()!.arrival, arrival);
+});
+
+test("new allocated selection binds an order without prior allocations and rejects redirected bindings", async () => {
+  await store.execute("admin", setup);
+  const imported = await preview();
+  await apply();
+  const ref = adminDb.doc(`fulfillmentOrders/${imported.rows[0].manifest.id}`);
+  const started = await store.execute("admin", {
+    action: "reconciliationStart",
+    eventId: manifest.eventId,
+    orderId: ref.id,
+    operationId: "review",
+    expectedVersion: 0,
+    reason: "Additional item request",
+  });
+  assert.ok("reconciliation" in started && started.reconciliation);
+  const order = started.reconciliation.order;
+  await seedBeanBudget();
+  const line = selectedLine(),
+    additions = [selectionReview(line, "shelfStable", 10)];
+  await beanBudget().update({ packingPlanId: null });
+  await rejects(
+    "reconciliationSelectionBudget",
+    selectionPreview(order, [line], additions),
+  );
+  await beanBudget().update({ packingPlanId: "beans-approved" });
+  await selectionPreview(order, [line], additions);
+  const binding = event()
+    .collection("allocationHouseholds")
+    .doc(fulfillmentKey(order.manifest.source.key));
+  await binding.set({
+    householdKey: order.manifest.source.key,
+    orderId: "another-order",
+  });
+  await rejects("packingHouseholdMismatch", reconcileApply());
+  assert.equal((await beanBudget().get()).data()!.allocated, 0);
+  await binding.delete();
+  await reconcileApply();
+  assert.equal((await binding.get()).data()!.orderId, ref.id);
+  assert.equal(
+    (await ref.get()).data()!.allocations[line.id].householdKey,
+    order.manifest.source.key,
+  );
 });

@@ -60,3 +60,5 @@ The CI browser step opts into Phase Two only in its emulator process, so these n
 ## Reconciliation after packing begins
 
 A separate [coordinator-reviewed full-repack workflow](fulfillment-reconciliation.md) now handles changes to existing instructions and released allocation quantities. Ordinary import and allocation-release operations retain their existing protections. The original approved plan remains historical; current event budgets and per-order quantities include explicitly reviewed reconciliation adjustments. No live integration or pilot change is included.
+
+New selections can now be added during reconciliation with explicit quantity, category, shelf and stock review. Existing item lines remain protected from removal/remapping. Released allocation budgets are checked and updated; unplanned items use manually reviewed quantities. See [new-selection procedure](fulfillment-reconciliation.md#adding-new-item-selections).

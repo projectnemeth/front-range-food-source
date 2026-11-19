@@ -20,6 +20,52 @@ export const reconciliationStartSchema = z
     reason,
   })
   .strict();
+export const additionSchema = z
+  .object({
+    lineId: z.string().trim().min(1).max(160),
+    category: z.enum([
+      "shelfStable",
+      "produce",
+      "refrigerated",
+      "frozen",
+      "otherPerishable",
+    ]),
+    reason,
+    stockConfirmed: z.literal(true),
+    available: z.number().int().min(0).max(10000).optional(),
+  })
+  .strict();
+export type ReconciliationAddition = z.infer<typeof additionSchema> & {
+  budget: null | {
+    itemId: string;
+    planId: string;
+    householdKey: string;
+    itemVersion: number;
+    previousAvailable: number;
+    previousAllocated: number;
+    available: number;
+    quantity: number;
+  };
+};
+export function selectionTiming(
+  category: z.infer<typeof additionSchema>["category"],
+) {
+  return {
+    stage:
+      category === "shelfStable"
+        ? ("advanceDry" as const)
+        : ("afterArrival" as const),
+    storage:
+      category === "refrigerated"
+        ? ("chilled" as const)
+        : category === "frozen"
+          ? ("frozen" as const)
+          : ("ambient" as const),
+  };
+}
+export const itemIdentity = (item: string) =>
+  item.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
+
 export const reconciliationPreviewSchema = z
   .object({
     action: z.literal("reconciliationPreview"),
@@ -27,6 +73,7 @@ export const reconciliationPreviewSchema = z
     reviewId: id,
     operationId: id,
     manifest: manifestSchema,
+    additions: z.array(additionSchema).max(100).default([]),
     adjustments: z
       .array(
         z
@@ -107,6 +154,7 @@ export type ReconciliationPreview = {
   fingerprint: string;
   expiresAt: string;
   manifest: Manifest;
+  additions?: ReconciliationAddition[];
   adjustments: (z.infer<
     typeof reconciliationPreviewSchema
   >["adjustments"][number] & {
