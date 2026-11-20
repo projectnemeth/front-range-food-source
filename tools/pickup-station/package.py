@@ -5,7 +5,7 @@ import zipfile
 
 base = Path(__file__).resolve().parent
 names = [
-    'Code.gs', 'Sheets.gs', 'Operations.gs', 'Access.gs', 'Index.html', 'appsscript.json',
+    'Code.gs', 'Sheets.gs', 'Operations.gs', 'Access.gs', 'Attendance.gs', 'Index.html', 'appsscript.json',
     'config.sheet.example.json', 'config.example.json', 'README.md', 'PILOT-CHECKLIST.md',
 ]
 contents = {name: (base / name).read_bytes() for name in names}

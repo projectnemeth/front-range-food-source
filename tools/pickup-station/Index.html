@@ -675,8 +675,9 @@
           />
         </div>
         <button id="refresh">Refresh list</button>
-        <button id="addWalkIn" class="walkInButton">+ Pre-Packed walk-up</button>
+        <button id="addWalkIn" class="walkInButton">+ Pre-Packed Pickup</button>
       </div>
+      <div class="notice" id="emptyEvent" hidden></div>
       <div class="small muted" id="syncTime"></div>
       <div class="small muted freshness" id="freshness" role="status"></div>
       <div class="stats">
@@ -697,6 +698,7 @@
               <option value="all">All households</option>
               <option value="expected">Expected</option>
               <option value="arrived">Arrived</option>
+              <option value="noShow">Previous No-Show</option>
               <option value="attention">Needs attention</option>
             </select>
           </div>
@@ -731,6 +733,21 @@
               ><button id="setup">Check setup</button>
             </div>
             <div id="setupResult" aria-live="polite"></div>
+            <details>
+              <summary>Attendance history in Google Sheets</summary>
+              <p class="small">
+                Creates or updates an FRFS Attendance tab in the original
+                response workbook. Original response columns stay intact.
+                Expected means no recorded check-in yet.
+              </p>
+              <div class="actions">
+                <button id="attendanceNow">Sync attendance now</button
+                ><button id="attendanceAuto">
+                  Enable five-minute attendance sync
+                </button>
+              </div>
+              <p id="attendanceInfo" role="status"></p>
+            </details>
             <details>
               <summary>Church iPad access</summary>
               <p class="small">
@@ -768,9 +785,9 @@
         <div class="queue" id="queue"></div>
       </section>
       <p class="small muted">
-        Check-in sends labels straight to the printer at the packing station.
-        If the app warns that a label may not have printed, ask the packing
-        team before reprinting.
+        Check-in sends labels straight to the printer at the packing station. If
+        the app warns that a label may not have printed, ask the packing team
+        before reprinting.
       </p>
     </main>
     <p id="buildInfo" class="small muted buildInfo" role="status"></p>
@@ -794,7 +811,7 @@
         document.body?.getAttribute("data-coordinator") === "true";
       const deviceStorageKey = "frfs_device_access_v1";
       // Must match getBuild() in Code.gs. package.py refuses to build if they differ.
-      const clientBuild = "2026-11-05.6";
+      const clientBuild = "2026-11-20.3";
       // Each iPad remembers its own car line; volunteers switch it only when they change lines.
       const lineStorageKey = "frfs_car_line_v1";
       const arrivalDrafts = new Map();
@@ -901,25 +918,36 @@
         settings = null;
       }
       function storedDeviceToken() {
+        let token = null;
         try {
-          return localStorage.getItem(deviceStorageKey);
-        } catch (_) {
-          return null;
-        }
+          token = localStorage.getItem(deviceStorageKey);
+        } catch (_) {}
+        // Session storage can recover a reload in this tab if persistent storage fails.
+        try {
+          token = token || sessionStorage.getItem(deviceStorageKey);
+        } catch (_) {}
+        if (token) rememberDeviceToken(token);
+        return token;
       }
       function rememberDeviceToken(token) {
         if (demo) return true;
+        let persistent = false;
         try {
           localStorage.setItem(deviceStorageKey, token);
-          return localStorage.getItem(deviceStorageKey) === token;
-        } catch (_) {
-          return false;
-        }
+          persistent = localStorage.getItem(deviceStorageKey) === token;
+        } catch (_) {}
+        try {
+          sessionStorage.setItem(deviceStorageKey, token);
+        } catch (_) {}
+        return persistent;
       }
       function forgetDeviceToken() {
         deviceToken = null;
         try {
           localStorage.removeItem(deviceStorageKey);
+        } catch (_) {}
+        try {
+          sessionStorage.removeItem(deviceStorageKey);
         } catch (_) {}
       }
       function demoStatus() {
@@ -1076,8 +1104,7 @@
                 j.providerCheckedAt = new Date().toISOString();
                 return resolve({
                   job: j,
-                  message:
-                    "Demo service status updated.",
+                  message: "Demo service status updated.",
                 });
               }
               if (method === "listRegistrations")
@@ -1117,6 +1144,15 @@
                   message: "Response selected. Nothing was printed.",
                 });
               }
+              if (
+                ["syncAttendanceToSource", "installAttendanceSync"].includes(
+                  method,
+                )
+              )
+                return resolve({
+                  message:
+                    "DEMO: attendance export simulated; no spreadsheet was changed.",
+                });
               if (method === "addWalkIn") {
                 const q = args[0];
                 let r = demoRecords.find((x) => x.walkInToken === q.token);
@@ -1135,6 +1171,8 @@
                     jobs: [],
                     lastJob: null,
                     walkIn: true,
+                    prepackedReason: q.prepackedReason || "walkUp",
+                    previousNoShow: q.prepackedReason === "noShow",
                     pickupType: "prepacked",
                     walkInToken: q.token,
                   };
@@ -1147,7 +1185,10 @@
                   copies: q.copies,
                   token: q.token + "-arrive",
                   arrival: q.arrival,
-                }).then((res) => resolve(Object.assign({ id: r.id }, res)), reject);
+                }).then(
+                  (res) => resolve(Object.assign({ id: r.id }, res)),
+                  reject,
+                );
                 return;
               }
               if (method === "requestAction") {
@@ -1180,6 +1221,11 @@
                     throw new Error(
                       "Choose this iPad’s car line and enter the 3-digit number before checking in.",
                     );
+                  if (q.prepackedReason) {
+                    r.prepackedReason = q.prepackedReason;
+                    r.previousNoShow = q.prepackedReason === "noShow";
+                    r.pickupType = "prepacked";
+                  }
                   r.checkedInAt = new Date().toISOString();
                   r.arrival = q.arrival;
                 }
@@ -1214,8 +1260,7 @@
                   x.jobs.some((j) => j.id === args[0]),
                 );
                 const j = r.jobs.find((j) => j.id === args[0]);
-                if (j.status === "Prepared")
-                  j.status = demoStatus();
+                if (j.status === "Prepared") j.status = demoStatus();
                 return resolve(j);
               }
               if (method === "confirmPrinted") {
@@ -1398,6 +1443,8 @@
               filter === "all" ||
               (filter === "expected" && !r.checkedInAt) ||
               (filter === "arrived" && r.checkedInAt) ||
+              (filter === "noShow" &&
+                (r.previousNoShow || r.prepackedReason === "noShow")) ||
               (filter === "attention" && needsAttention(r))),
         );
       }
@@ -1458,7 +1505,9 @@
             el("h3", r.name),
             el(
               "p",
-              arrivalText(r.arrival) + (r.walkIn ? " · PRE-PACKED" : ""),
+              arrivalText(r.arrival) +
+                (r.pickupType === "prepacked" ? " · PRE-PACKED" : "") +
+                historyStatus(r),
               "arrivalLine",
             ),
             el("div", r.phone + " · " + r.householdSize + " people"),
@@ -1499,7 +1548,8 @@
         const box = $("buildInfo");
         if (serverBuild === clientBuild) {
           box.className = "small muted buildInfo";
-          box.textContent = "Version " + clientBuild + " · screen and server match";
+          box.textContent =
+            "Version " + clientBuild + " · screen and server match";
           return;
         }
         box.className = "small buildInfo warnText";
@@ -1594,7 +1644,7 @@
           );
           box.append(head);
         }
-        if (r.pickupType === "prepacked")
+        if (r.pickupType === "prepacked" || draftFor(r).prepackedReason)
           box.append(el("div", "PRE-PACKED PICKUP", "labelBar"));
         box.append(el("b", r.name));
         if (a && a.vehicle) box.append(el("p", a.vehicle));
@@ -1635,19 +1685,30 @@
           "Number entered: " + (d.number || "none"),
         );
         const pad = el("div", undefined, "keypad");
-        ["1", "2", "3", "4", "5", "6", "7", "8", "9", "Clear", "0", "⌫"].forEach(
-          (k) => {
-            const key = el("button", k, /\d/.test(k) ? "key" : "key small");
-            if (k === "⌫") key.setAttribute("aria-label", "Delete last digit");
-            key.onclick = () => {
-              if (k === "Clear") d.number = "";
-              else if (k === "⌫") d.number = d.number.slice(0, -1);
-              else if (d.number.length < 3) d.number += k;
-              renderDetail();
-            };
-            pad.append(key);
-          },
-        );
+        [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "Clear",
+          "0",
+          "⌫",
+        ].forEach((k) => {
+          const key = el("button", k, /\d/.test(k) ? "key" : "key small");
+          if (k === "⌫") key.setAttribute("aria-label", "Delete last digit");
+          key.onclick = () => {
+            if (k === "Clear") d.number = "";
+            else if (k === "⌫") d.number = d.number.slice(0, -1);
+            else if (d.number.length < 3) d.number += k;
+            renderDetail();
+          };
+          pad.append(key);
+        });
         section.append(display, pad);
         const vLabel = el("label", "Vehicle (optional)");
         vLabel.htmlFor = "vehicle";
@@ -1689,6 +1750,7 @@
           name: walkInDraft.name.trim() || "New household",
           phone: walkInDraft.phone.trim() || "No phone",
           householdSize: walkInDraft.size,
+          prepackedReason: walkInDraft.prepackedReason,
           pickupType: "prepacked",
         };
       }
@@ -1699,6 +1761,7 @@
           name: digits ? "" : text,
           phone: digits ? text : "",
           size: 1,
+          prepackedReason: "walkUp",
           token: null,
         };
         arrivalDrafts.delete(WALKIN);
@@ -1706,15 +1769,55 @@
         switchView("checkin");
         $("detail").scrollIntoView({ behavior: "smooth", block: "start" });
       }
+      function historyStatus(r) {
+        return r.previousNoShow
+          ? " · Previous No-Show"
+          : r.prepackedReason === "walkUp"
+            ? " · Walk Up"
+            : "";
+      }
+      function prepackedChoices(draft, required) {
+        const group = el("fieldset");
+        group.append(el("legend", "Pre-Packed Pickup"));
+        [
+          ["noShow", "No Show"],
+          ["walkUp", "Walk Up"],
+        ].forEach(([value, text]) => {
+          const label = el("label"),
+            input = el("input");
+          input.id = "prepacked-" + value;
+          input.type = "checkbox";
+          input.checked = draft.prepackedReason === value;
+          input.onchange = () => {
+            draft.prepackedReason = input.checked
+              ? value
+              : required
+                ? value
+                : null;
+            renderDetail();
+          };
+          label.append(input, el("span", text));
+          group.append(label);
+        });
+        group.append(
+          el(
+            "p",
+            "No Show records a previous missed pickup. Checking in still marks them arrived today.",
+            "small muted",
+          ),
+        );
+        return group;
+      }
       function renderWalkIn(box, draft) {
         box.append(
           el("h2", "Pre-Packed Pickup"),
           el(
             "p",
-            "For a household that did not pre-register. They receive a pre-packed box.",
+            "Choose why this household receives a pre-packed box. No Show means they missed a previous pickup and are checking in now.",
             "small muted",
           ),
         );
+        box.append(prepackedChoices(walkInDraft, true));
         const nameLabel = el("label", "Name");
         nameLabel.htmlFor = "walkName";
         const name = el("input");
@@ -1755,7 +1858,11 @@
           walkInDraft.size = Math.min(99, walkInDraft.size + 1);
           renderDetail();
         };
-        stepper.append(minus, el("span", String(walkInDraft.size), "value"), plus);
+        stepper.append(
+          minus,
+          el("span", String(walkInDraft.size), "value"),
+          plus,
+        );
         box.append(nameLabel, name, phoneLabel, phone, sizeLabel, stepper);
         box.append(arrivalEditor(walkInRecord(), false));
         const label = el("label", "Copies for this household");
@@ -1796,7 +1903,10 @@
         const d = draftFor({ id: WALKIN }),
           name = walkInDraft.name.trim();
         if (!carLine) {
-          note("Choose this iPad’s line (Blue or Orange) at the top first.", true);
+          note(
+            "Choose this iPad’s line (Blue or Orange) at the top first.",
+            true,
+          );
           return;
         }
         if (!name) {
@@ -1813,7 +1923,11 @@
         if (
           clash &&
           !confirm(
-            "Number " + d.number + " is already used for " + clash.name + ". Use it again?",
+            "Number " +
+              d.number +
+              " is already used for " +
+              clash.name +
+              ". Use it again?",
           )
         )
           return;
@@ -1824,10 +1938,15 @@
           name,
           phone: walkInDraft.phone.trim(),
           householdSize: walkInDraft.size,
+          prepackedReason: walkInDraft.prepackedReason,
           copies: Number($("copies").value),
           token: walkInDraft.token,
           print: true,
-          arrival: { number: d.number, line: carLine, vehicle: d.vehicle.trim() },
+          arrival: {
+            number: d.number,
+            line: carLine,
+            vehicle: d.vehicle.trim(),
+          },
         };
         let saved = false;
         setBusy(true);
@@ -1846,13 +1965,15 @@
               name +
               ". " +
               (result.job ? guidance(result.job) : ""),
-            !!result.job && ["Failed", "Outcome unknown"].includes(result.job.status),
+            !!result.job &&
+              ["Failed", "Outcome unknown"].includes(result.job.status),
           );
         } catch (e) {
           note(
             saved
               ? "Added, but the list could not refresh. Refresh before taking another action."
-              : e.message + " Your entry is kept; tap the button again to retry safely.",
+              : e.message +
+                  " Your entry is kept; tap the button again to retry safely.",
             true,
           );
         } finally {
@@ -1894,13 +2015,13 @@
                   " · " +
                   r.householdSize +
                   " people" +
-                  (r.walkIn ? " · Pre-Packed" : ""),
+                  (r.pickupType === "prepacked" ? " · Pre-Packed" : ""),
               ),
             );
             button.append(
               el(
                 "span",
-                r.errors.length
+                (r.errors.length
                   ? "Needs review"
                   : r.checkedInAt
                     ? "Arrived" +
@@ -1912,7 +2033,7 @@
                         : "")
                     : r.lastJob
                       ? "Labels prepared · not arrived"
-                      : "Expected",
+                      : "Expected") + historyStatus(r),
                 "status" + (r.errors.length ? " warn" : ""),
               ),
             );
@@ -1971,14 +2092,14 @@
         box.append(
           el(
             "span",
-            r.checkedInAt
+            (r.checkedInAt
               ? "Arrived · " +
-                  new Date(r.checkedInAt).toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  }) +
-                  (r.arrival ? " · " + arrivalText(r.arrival) : "")
-              : "Expected · not checked in",
+                new Date(r.checkedInAt).toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                }) +
+                (r.arrival ? " · " + arrivalText(r.arrival) : "")
+              : "Expected · not checked in") + historyStatus(r),
             "status",
           ),
         );
@@ -2047,7 +2168,10 @@
               "notice error",
             ),
           );
-        if (!r.checkedInAt) box.append(arrivalEditor(r, false));
+        if (!r.checkedInAt) {
+          box.append(arrivalEditor(r, false));
+          box.append(prepackedChoices(draftFor(r), false));
+        }
         const preview = el("div", undefined, "label");
         preview.id = "labelPreview";
         fillPreview(preview, r);
@@ -2149,6 +2273,10 @@
         const data = await api("listRegistrations", $("event").value);
         if (seq !== readSeq) return;
         records = data;
+        $("emptyEvent").hidden = records.length > 0;
+        $("emptyEvent").textContent = settings?.admin
+          ? "This event has no imported households. Open Coordinator tools → Preview source import, then Refresh source data. Refresh list only reads the saved list."
+          : "This event has no imported households. Ask a coordinator to import its response tab.";
         lastReadAt = new Date();
         $("freshness").className = "small muted freshness";
         $("freshness").textContent =
@@ -2197,8 +2325,16 @@
             )
           )
             return;
-          arrival = { number: d.number, line: carLine, vehicle: d.vehicle.trim() };
-        } else if (kind === "reprint" && r.checkedInAt && arrivalDrafts.has(r.id)) {
+          arrival = {
+            number: d.number,
+            line: carLine,
+            vehicle: d.vehicle.trim(),
+          };
+        } else if (
+          kind === "reprint" &&
+          r.checkedInAt &&
+          arrivalDrafts.has(r.id)
+        ) {
           const d = arrivalDrafts.get(r.id);
           if (d.number || d.line) {
             if (!/^\d{3}$/.test(d.number) || !d.line) {
@@ -2208,7 +2344,11 @@
               );
               return;
             }
-            arrival = { number: d.number, line: d.line, vehicle: d.vehicle.trim() };
+            arrival = {
+              number: d.number,
+              line: d.line,
+              vehicle: d.vehicle.trim(),
+            };
           }
         }
         if (
@@ -2242,6 +2382,9 @@
           copies: Number($("copies").value),
           token: tokens.get(key),
           reason,
+          prepackedReason: ["checkin", "checkinOnly"].includes(kind)
+            ? draftFor(r).prepackedReason
+            : null,
           arrival,
         };
         let saved = false;
@@ -2262,9 +2405,7 @@
           note(
             (result.reused
               ? "Already recorded" +
-                (result.arrival
-                  ? " as " + arrivalText(result.arrival)
-                  : "") +
+                (result.arrival ? " as " + arrivalText(result.arrival) : "") +
                 ". "
               : "Request saved. ") +
               (result.job
@@ -2436,6 +2577,7 @@
                     ": " +
                     r.sourceRows +
                     " source rows" +
+                    (r.assumedDateColumn ? " (blank A1 treated as Date)" : "") +
                     (r.lastListRow
                       ? " (list ends at row " + r.lastListRow + ")"
                       : "") +
@@ -2663,7 +2805,7 @@
           await loadApplication();
           note(
             saved
-              ? "This iPad is authorized for check-in and printing."
+              ? "This iPad is authorized. Access renews with use; keep opening this same staff link in this browser."
               : "This browser could not save its authorization. Access works only in this open page; ask the coordinator to test browser storage before pickup.",
             !saved,
           );
@@ -2749,6 +2891,29 @@
           setBusy(false);
         }
       };
+      for (const [id, method] of [
+        ["attendanceNow", "syncAttendanceToSource"],
+        ["attendanceAuto", "installAttendanceSync"],
+      ]) {
+        $(id).onclick = async () => {
+          if (
+            busy ||
+            !confirm(
+              "Write attendance history to the FRFS Attendance tab in the original response workbook?",
+            )
+          )
+            return;
+          setBusy(true);
+          try {
+            const result = await api(method);
+            $("attendanceInfo").textContent = result.message;
+          } catch (e) {
+            $("attendanceInfo").textContent = e.message;
+          } finally {
+            setBusy(false);
+          }
+        };
+      }
       $("setup").onclick = loadSetup;
       $("sync").onclick = async () => {
         if (busy) return;
@@ -2834,15 +2999,27 @@
           if (authMode === "devices" && !coordinatorMode) {
             deviceToken = storedDeviceToken();
             if (!deviceToken) {
-              showDeviceGate("Enter the setup PIN from your coordinator.");
+              showDeviceGate(
+                "This browser has no saved iPad authorization. Open the same saved staff link in the same browser, outside Private Browsing, or ask for a new setup PIN.",
+              );
               return;
             }
           }
           await loadApplication();
         } catch (e) {
-          if (authMode === "devices" && !coordinatorMode)
-            showDeviceGate(e.message);
-          else {
+          if (authMode === "devices" && !coordinatorMode) {
+            if (!deviceToken) showDeviceGate(e.message);
+            else {
+              $("deviceGate").hidden = true;
+              $("staffApp").hidden = false;
+              $("adminTools").hidden = true;
+              note(
+                "Could not reconnect. This iPad's saved authorization has been kept. Reload to retry; you do not need a new PIN for a connection error. " +
+                  e.message,
+                true,
+              );
+            }
+          } else {
             $("staffApp").hidden = false;
             note(e.message, true);
           }

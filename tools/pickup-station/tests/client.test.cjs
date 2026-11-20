@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const vm = require("node:vm");
 const fs = require("node:fs");
 const path = require("node:path");
-async function client() {
+async function client(options = {}) {
   const roots = [];
   class Element {
     constructor(tag) {
@@ -99,6 +99,7 @@ async function client() {
     Error,
     setTimeout: (fn) => setTimeout(fn, 0),
     setInterval() {},
+    ...(options.globals || {}),
   });
   vm.runInContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], context);
   await vm.runInContext("stationReady", context);
@@ -126,7 +127,9 @@ test("arrival appears in packing view; advance printing does not create arrival"
   await f.run("refresh()");
   f.run("switchView('packing')");
   assert.match(f.get("queue").textContent, /No matching arrivals/);
-  await f.run("api('requestAction',{id:'demo-0',action:'checkin',copies:3,arrival:{number:'101',line:'blue',vehicle:''}})");
+  await f.run(
+    "api('requestAction',{id:'demo-0',action:'checkin',copies:3,arrival:{number:'101',line:'blue',vehicle:''}})",
+  );
   await f.run("refresh()");
   assert.match(f.get("queue").textContent, /Maria Garcia/);
   assert.match(f.get("packingCount").textContent, /1 arrived/);
@@ -135,7 +138,9 @@ test("arrival appears in packing view; advance printing does not create arrival"
 test("unknown output gets attention and confirmation clears the print problem", async () => {
   const f = await client();
   f.get("demoOutcome").value = "Outcome unknown";
-  await f.run("api('requestAction',{id:'demo-2',action:'checkin',copies:1,arrival:{number:'101',line:'blue',vehicle:''}})");
+  await f.run(
+    "api('requestAction',{id:'demo-2',action:'checkin',copies:1,arrival:{number:'101',line:'blue',vehicle:''}})",
+  );
   await f.run("refresh()");
   f.run("switchView('packing')");
   assert.match(f.get("packingCount").textContent, /1 need attention/);
@@ -178,7 +183,9 @@ test("successful mutation followed by refresh failure does not invite repeating 
 });
 test("expected/arrived filters and packing view are independent", async () => {
   const f = await client();
-  await f.run("api('requestAction',{id:'demo-0',action:'checkin',copies:3,arrival:{number:'101',line:'blue',vehicle:''}})");
+  await f.run(
+    "api('requestAction',{id:'demo-0',action:'checkin',copies:3,arrival:{number:'101',line:'blue',vehicle:''}})",
+  );
   await f.run("refresh()");
   f.get("filter").value = "expected";
   assert.equal(f.run("visible().length"), 5);
@@ -191,7 +198,9 @@ test("coordinator resolves a fictional repeated ID before check-in, without prin
   assert.match(f.get("detail").textContent, /Review repeated ID/);
   assert.equal(f.get("copies"), null);
   await assert.rejects(
-    f.run("api('requestAction',{id:'demo-5',action:'checkin',copies:1,arrival:{number:'101',line:'blue',vehicle:''}})"),
+    f.run(
+      "api('requestAction',{id:'demo-5',action:'checkin',copies:1,arrival:{number:'101',line:'blue',vehicle:''}})",
+    ),
     /review required/,
   );
   f.get("duplicateChoice").value = "demo-candidate-2";
@@ -225,25 +234,34 @@ test("coordinator setup loads a tab and updates demo event label without importi
 });
 test("service diagnostics show spooling without confirming physical labels", async () => {
   const f = await client();
-  await f.run("api('requestAction',{id:'demo-0',action:'checkin',copies:1,arrival:{number:'101',line:'blue',vehicle:''}})");
+  await f.run(
+    "api('requestAction',{id:'demo-0',action:'checkin',copies:1,arrival:{number:'101',line:'blue',vehicle:''}})",
+  );
   await f.run("refresh()");
   await f.run("checkJobStatus(demoRecords[0].lastJob.id)");
   f.run("switchView('packing')");
-  assert.match(f.get("queue").textContent, /Sent to the printer at the packing station/);
+  assert.match(
+    f.get("queue").textContent,
+    /Sent to the printer at the packing station/,
+  );
   assert.doesNotMatch(f.get("queue").textContent, /I saw these labels print/);
   assert.equal(f.run("demoRecords[0].lastJob.status"), "Submitted");
   assert.equal(f.run("demoRecords[0].jobs.length"), 1);
 });
 test("service error needs attention until a reprint is sent", async () => {
   const f = await client();
-  await f.run("api('requestAction',{id:'demo-0',action:'checkin',copies:1,arrival:{number:'101',line:'blue',vehicle:''}})");
+  await f.run(
+    "api('requestAction',{id:'demo-0',action:'checkin',copies:1,arrival:{number:'101',line:'blue',vehicle:''}})",
+  );
   await f.run("refresh()");
   f.get("demoOutcome").value = "Failed";
   await f.run("checkJobStatus(demoRecords[0].lastJob.id)");
   f.run("switchView('packing')");
   assert.match(f.get("packingCount").textContent, /1 need attention/);
   f.get("demoOutcome").value = "Submitted";
-  await f.run("api('requestAction',{id:'demo-0',action:'reprint',copies:1,reason:'Printer jammed'})");
+  await f.run(
+    "api('requestAction',{id:'demo-0',action:'reprint',copies:1,reason:'Printer jammed'})",
+  );
   await f.run("refresh()");
   assert.match(f.get("packingCount").textContent, /0 need attention/);
   assert.equal(f.run("demoRecords[0].jobs.length"), 2);
@@ -284,7 +302,9 @@ const settle = async () => {
 };
 test("normal print is followed up automatically with no alert and no extra job", async () => {
   const f = await client();
-  f.run("carLine='blue';arrivalDrafts.set('demo-3',{number:'123',vehicle:'',line:null});current='demo-3';render()");
+  f.run(
+    "carLine='blue';arrivalDrafts.set('demo-3',{number:'123',vehicle:'',line:null});current='demo-3';render()",
+  );
   await f.run("action('checkin',records.find(r=>r.id==='demo-3'))");
   await settle();
   assert.equal(f.run("demoRecords[3].lastJob.providerState"), "done");
@@ -295,28 +315,39 @@ test("normal print is followed up automatically with no alert and no extra job",
 test("offline print computer raises a persistent iPad alert without resending", async () => {
   const f = await client();
   f.get("demoOutcome").value = "offline";
-  f.run("carLine='blue';arrivalDrafts.set('demo-3',{number:'123',vehicle:'',line:null});current='demo-3';render()");
+  f.run(
+    "carLine='blue';arrivalDrafts.set('demo-3',{number:'123',vehicle:'',line:null});current='demo-3';render()",
+  );
   await f.run("action('checkin',records.find(r=>r.id==='demo-3'))");
   assert.equal(f.run("demoRecords[3].lastJob.status"), "Submitted");
   await settle();
   assert.equal(f.run("printAlerts.size"), 1);
   assert.equal(f.get("printAlerts").hidden, false);
-  assert.match(f.get("printAlerts").textContent, /Label problem: David Martinez/);
+  assert.match(
+    f.get("printAlerts").textContent,
+    /Label problem: David Martinez/,
+  );
   assert.match(f.get("printAlerts").textContent, /has not picked up/);
   assert.equal(f.run("demoRecords[3].jobs.length"), 1);
   assert.equal(f.run("demoRecords[3].lastJob.status"), "Submitted");
 });
 test("stalled print appears under needs attention once it has waited too long", async () => {
   const f = await client();
-  await f.run("api('requestAction',{id:'demo-0',action:'checkin',copies:1,arrival:{number:'101',line:'blue',vehicle:''}})");
-  f.run("demoRecords[0].lastJob.providerState='new';demoRecords[0].lastJob.createdAt=new Date(Date.now()-60000).toISOString();demoRecords[0].lastJob.providerCheckedAt=new Date().toISOString()");
+  await f.run(
+    "api('requestAction',{id:'demo-0',action:'checkin',copies:1,arrival:{number:'101',line:'blue',vehicle:''}})",
+  );
+  f.run(
+    "demoRecords[0].lastJob.providerState='new';demoRecords[0].lastJob.createdAt=new Date(Date.now()-60000).toISOString();demoRecords[0].lastJob.providerCheckedAt=new Date().toISOString()",
+  );
   await f.run("refresh()");
   f.run("switchView('packing')");
   assert.match(f.get("packingCount").textContent, /1 need attention/);
 });
 test("print service error raises an alert that can be dismissed and reviewed", async () => {
   const f = await client();
-  f.run("carLine='blue';arrivalDrafts.set('demo-1',{number:'123',vehicle:'',line:null});current='demo-1';render()");
+  f.run(
+    "carLine='blue';arrivalDrafts.set('demo-1',{number:'123',vehicle:'',line:null});current='demo-1';render()",
+  );
   await f.run("action('checkin',records.find(r=>r.id==='demo-1'))");
   f.get("demoOutcome").value = "Failed";
   await settle();
@@ -334,7 +365,9 @@ test("print service error raises an alert that can be dismissed and reviewed", a
 test("rejected or uncertain sends alert immediately and are not watched again", async () => {
   const f = await client();
   f.get("demoOutcome").value = "Outcome unknown";
-  f.run("carLine='blue';arrivalDrafts.set('demo-2',{number:'123',vehicle:'',line:null});current='demo-2';render()");
+  f.run(
+    "carLine='blue';arrivalDrafts.set('demo-2',{number:'123',vehicle:'',line:null});current='demo-2';render()",
+  );
   await f.run("action('checkin',records.find(r=>r.id==='demo-2'))");
   assert.equal(f.run("printAlerts.size"), 1);
   assert.match(f.get("printAlerts").textContent, /Amina Hassan/);
@@ -356,15 +389,32 @@ test("check-in is blocked until this iPad has a line and a 3-digit number", asyn
 test("on-screen keypad caps at three digits and check-in saves number, line and vehicle", async () => {
   const f = await client();
   f.run("setLine('orange');current='demo-4';render()");
-  const keys = () => f.get("detail").children.find((c) => c.className === "arrivalEditor")
-    .children.find((c) => c.className === "keypad").children;
-  for (const k of ["4", "0", "7", "9"]) keys().find((b) => b.textContent === k).onclick();
-  assert.equal(f.run("draftFor(records.find(r=>r.id==='demo-4')).number"), "407");
-  f.run("setVehiclePart(draftFor(records.find(r=>r.id==='demo-4')),'color','Grey');setVehiclePart(draftFor(records.find(r=>r.id==='demo-4')),'type','SUV')");
-  assert.equal(f.run("draftFor(records.find(r=>r.id==='demo-4')).vehicle"), "Grey SUV");
+  const keys = () =>
+    f
+      .get("detail")
+      .children.find((c) => c.className === "arrivalEditor")
+      .children.find((c) => c.className === "keypad").children;
+  for (const k of ["4", "0", "7", "9"])
+    keys()
+      .find((b) => b.textContent === k)
+      .onclick();
+  assert.equal(
+    f.run("draftFor(records.find(r=>r.id==='demo-4')).number"),
+    "407",
+  );
+  f.run(
+    "setVehiclePart(draftFor(records.find(r=>r.id==='demo-4')),'color','Grey');setVehiclePart(draftFor(records.find(r=>r.id==='demo-4')),'type','SUV')",
+  );
+  assert.equal(
+    f.run("draftFor(records.find(r=>r.id==='demo-4')).vehicle"),
+    "Grey SUV",
+  );
   f.get("search").value = "Elena";
   await f.run("action('checkin',records.find(r=>r.id==='demo-4'))");
-  assert.equal(f.run("JSON.stringify(demoRecords[4].arrival)"), JSON.stringify({ number: "407", line: "orange", vehicle: "Grey SUV" }));
+  assert.equal(
+    f.run("JSON.stringify(demoRecords[4].arrival)"),
+    JSON.stringify({ number: "407", line: "orange", vehicle: "Grey SUV" }),
+  );
   assert.equal(f.get("search").value, "");
   f.run("switchView('packing')");
   assert.match(f.get("queue").textContent, /#407 · Orange line · Grey SUV/);
@@ -372,10 +422,14 @@ test("on-screen keypad caps at three digits and check-in saves number, line and 
 });
 test("line choice persists per iPad and a reused check-in reports the saved details", async () => {
   const f = await client();
-  f.run("setLine('blue');arrivalDrafts.set('demo-0',{number:'222',vehicle:'Tan van',line:null});current='demo-0';render()");
+  f.run(
+    "setLine('blue');arrivalDrafts.set('demo-0',{number:'222',vehicle:'Tan van',line:null});current='demo-0';render()",
+  );
   await f.run("action('checkin',records.find(r=>r.id==='demo-0'))");
   assert.equal(f.run("demoRecords[0].arrival.line"), "blue");
-  const again = await f.run("api('requestAction',{id:'demo-0',action:'checkin',copies:1,arrival:{number:'333',line:'orange',vehicle:''}})");
+  const again = await f.run(
+    "api('requestAction',{id:'demo-0',action:'checkin',copies:1,arrival:{number:'333',line:'orange',vehicle:''}})",
+  );
   assert.equal(again.reused, true);
   assert.equal(again.arrival.number, "222");
 });
@@ -391,10 +445,14 @@ test("background refresh does not grey out buttons and stale reads are discarded
 });
 test("correcting car details for a reprint sends the corrected arrival", async () => {
   const f = await client();
-  f.run("setLine('blue');arrivalDrafts.set('demo-1',{number:'500',vehicle:'',line:null});current='demo-1';render()");
+  f.run(
+    "setLine('blue');arrivalDrafts.set('demo-1',{number:'500',vehicle:'',line:null});current='demo-1';render()",
+  );
   await f.run("action('checkin',records.find(r=>r.id==='demo-1'))");
   f.run("current='demo-1';render()");
-  f.run("const d=draftFor(records.find(r=>r.id==='demo-1'));d.number='505';d.line='orange'");
+  f.run(
+    "const d=draftFor(records.find(r=>r.id==='demo-1'));d.number='505';d.line='orange'",
+  );
   f.get("reason").value = "Wrong number typed";
   await f.run("action('reprint',records.find(r=>r.id==='demo-1'))");
   assert.equal(f.run("demoRecords[1].arrival.number"), "505");
@@ -407,7 +465,10 @@ test("version line shows when screen and server match, and warns when they diffe
   assert.match(f.get("buildInfo").textContent, /screen and server match/);
   f.run("renderBuild(null)");
   assert.match(f.get("buildInfo").textContent, /Version mismatch/);
-  assert.match(f.get("buildInfo").textContent, /New version of both deployments/);
+  assert.match(
+    f.get("buildInfo").textContent,
+    /New version of both deployments/,
+  );
 });
 
 test("walk-up form adds a Pre-Packed Pickup with line, number and household size", async () => {
@@ -415,7 +476,10 @@ test("walk-up form adds a Pre-Packed Pickup with line, number and household size
   f.run("setLine('blue')");
   f.get("search").value = "Zed Newcomer";
   f.get("search").oninput();
-  assert.match(f.get("list").textContent, /Add “Zed Newcomer” as a Pre-Packed Pickup/);
+  assert.match(
+    f.get("list").textContent,
+    /Add “Zed Newcomer” as a Pre-Packed Pickup/,
+  );
   f.run("startWalkIn(document.getElementById('search').value)");
   assert.equal(f.run("walkInDraft.name"), "Zed Newcomer");
   f.run("walkInDraft.size=5;draftFor({id:WALKIN}).number='777';renderDetail()");
@@ -441,4 +505,170 @@ test("walk-up needs a name and number; phone-like search fills phone", async () 
   await f.run("submitWalkIn()");
   assert.match(f.get("feedback").textContent, /3-digit/);
   assert.equal(f.run("demoRecords.filter(r=>r.walkIn).length"), 0);
+});
+
+test("pre-packed checkboxes are exclusive and prior no-show remains arrived in both views", async () => {
+  const f = await client();
+  f.run("setLine('blue');startWalkIn('Returning Household')");
+  assert.equal(f.get("prepacked-walkUp").checked, true);
+  f.get("prepacked-noShow").checked = true;
+  f.get("prepacked-noShow").onchange();
+  assert.equal(f.get("prepacked-walkUp").checked, false);
+  assert.equal(f.run("walkInDraft.prepackedReason"), "noShow");
+  f.run("draftFor({id:WALKIN}).number='607';renderDetail()");
+  await f.run("refresh()");
+  assert.equal(f.get("prepacked-noShow").checked, true);
+  await f.run("submitWalkIn()");
+  const r = JSON.parse(f.run("JSON.stringify(demoRecords.find(r=>r.walkIn))"));
+  assert.ok(r.checkedInAt);
+  assert.equal(r.previousNoShow, true);
+  assert.match(f.get("list").textContent, /Arrived.*Previous No-Show/);
+  assert.match(f.get("detail").textContent, /Arrived.*Previous No-Show/);
+  f.run("switchView('packing')");
+  assert.match(f.get("queue").textContent, /Previous No-Show/);
+  f.run("switchView('checkin')");
+  f.get("filter").value = "expected";
+  assert.equal(f.run("visible().some(r=>r.previousNoShow)"), false);
+});
+test("existing expected household can check in as a previous no-show", async () => {
+  const f = await client();
+  f.run("setLine('orange');current='demo-0';render()");
+  f.get("prepacked-noShow").checked = true;
+  f.get("prepacked-noShow").onchange();
+  f.run("draftFor(records[0]).number='608';renderDetail()");
+  await f.run("action('checkin',records[0])");
+  assert.equal(f.run("demoRecords[0].previousNoShow"), true);
+  assert.equal(f.run("demoRecords[0].pickupType"), "prepacked");
+  assert.match(f.get("detail").textContent, /Previous No-Show/);
+});
+test("empty event explains source import rather than appearing to have an empty roster", async () => {
+  const f = await client();
+  f.run("demoRecords.length=0");
+  await f.run("refresh()");
+  assert.equal(f.get("emptyEvent").hidden, false);
+  assert.match(f.get("emptyEvent").textContent, /Refresh source data/);
+});
+
+test("Previous No-Show filter finds saved check-ins and combines with name/phone search", async () => {
+  const f = await client();
+  assert.match(
+    fs.readFileSync(path.join(__dirname, "../Index.html"), "utf8"),
+    /<option value="noShow">Previous No-Show<\/option>/,
+  );
+  f.run(
+    "demoRecords[0].previousNoShow=true;demoRecords[0].checkedInAt=new Date().toISOString();demoRecords[2].prepackedReason='noShow'",
+  );
+  await f.run("refresh()");
+  f.get("filter").value = "noShow";
+  f.get("filter").onchange();
+  assert.equal(f.run("visible().length"), 2);
+  assert.equal(f.run("visible().some(r=>r.id==='demo-1')"), false);
+  f.get("search").value = "Garcia";
+  assert.equal(f.run("visible().length"), 1);
+  assert.equal(f.run("visible()[0].id"), "demo-0");
+  f.get("search").value = f.run("demoRecords[2].phoneSearch");
+  assert.equal(f.run("visible()[0].id"), "demo-2");
+  f.get("search").value = "";
+  f.get("filter").value = "arrived";
+  assert.equal(f.run("visible().some(r=>r.id==='demo-0')"), true);
+  f.get("filter").value = "expected";
+  assert.equal(f.run("visible().some(r=>r.id==='demo-0')"), false);
+});
+
+test("iPad reload can recover a session backup when persistent storage is unavailable", async () => {
+  const f = await client();
+  f.c.localStorage = {
+    getItem() {
+      throw Error("unavailable");
+    },
+    setItem() {
+      throw Error("unavailable");
+    },
+    removeItem() {},
+  };
+  const backup = new Map([["frfs_device_access_v1", "a".repeat(64)]]);
+  f.c.sessionStorage = {
+    getItem: (k) => backup.get(k) || null,
+    setItem: (k, v) => backup.set(k, v),
+    removeItem: (k) => backup.delete(k),
+  };
+  assert.equal(f.run("storedDeviceToken()"), "a".repeat(64));
+  f.run("forgetDeviceToken()");
+  assert.equal(f.run("storedDeviceToken()"), null);
+});
+test("normal storage keeps the device authorization across reload reads", async () => {
+  const f = await client();
+  const values = new Map();
+  f.c.localStorage = {
+    getItem: (k) => values.get(k) || null,
+    setItem: (k, v) => values.set(k, v),
+    removeItem: (k) => values.delete(k),
+  };
+  values.set("frfs_device_access_v1", "b".repeat(64));
+  assert.equal(f.run("storedDeviceToken()"), "b".repeat(64));
+  assert.equal(f.run("storedDeviceToken()"), "b".repeat(64));
+});
+
+function liveBridge(error) {
+  return {
+    script: {
+      run: {
+        withSuccessHandler(success) {
+          return {
+            withFailureHandler(failure) {
+              return {
+                getBootstrap() {
+                  success({ authMode: "devices" });
+                },
+                getBuild() {
+                  success("2026-11-20.3");
+                },
+                staffCall() {
+                  failure(Error(error));
+                },
+              };
+            },
+          };
+        },
+      },
+    },
+  };
+}
+test("temporary startup failure keeps iPad authorization and does not request another PIN", async () => {
+  const values = new Map([["frfs_device_access_v1", "c".repeat(64)]]),
+    google = liveBridge("Temporary network error");
+  const f = await client({
+    globals: {
+      google,
+      window: { google, addEventListener() {} },
+      localStorage: {
+        getItem: (k) => values.get(k) || null,
+        setItem: (k, v) => values.set(k, v),
+        removeItem: (k) => values.delete(k),
+      },
+    },
+  });
+  assert.equal(f.get("deviceGate").hidden, true);
+  assert.match(
+    f.get("feedback").textContent,
+    /saved authorization has been kept/,
+  );
+  assert.equal(values.get("frfs_device_access_v1"), "c".repeat(64));
+});
+test("actual revoked or expired access clears stored token and requires enrollment", async () => {
+  const values = new Map([["frfs_device_access_v1", "d".repeat(64)]]),
+    google = liveBridge("DEVICE_ACCESS_REQUIRED: revoked");
+  const f = await client({
+    globals: {
+      google,
+      window: { google, addEventListener() {} },
+      localStorage: {
+        getItem: (k) => values.get(k) || null,
+        setItem: (k, v) => values.set(k, v),
+        removeItem: (k) => values.delete(k),
+      },
+    },
+  });
+  assert.equal(f.get("deviceGate").hidden, false);
+  assert.equal(values.has("frfs_device_access_v1"), false);
 });

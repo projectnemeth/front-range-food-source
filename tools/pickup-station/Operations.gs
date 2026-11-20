@@ -13,14 +13,24 @@ function getSetupChecklist() {
   check("storage", "Working spreadsheet", () => {
     read_("Registrations");
     read_("Jobs");
-    return "Storage is readable. Only this separate workbook receives arrivals and print history.";
+    return "Storage is readable. This workbook is authoritative for arrivals and print history; optional attendance export mirrors a summary to the original workbook.";
+  });
+  check("attendance", "Attendance history", () => {
+    const props = PropertiesService.getScriptProperties();
+    if (props.getProperty("ATTENDANCE_SYNC_ERROR"))
+      throw new Error(props.getProperty("ATTENDANCE_SYNC_ERROR"));
+    const stamp = props.getProperty("LAST_ATTENDANCE_SYNC");
+    return stamp
+      ? "Last export to FRFS Attendance: " + stamp
+      : "Not exported yet. Use Attendance history controls to sync manually or enable a five-minute trigger.";
   });
   let tabs = [];
   if (c.source?.type === "sheets")
     check("source", "Response sheet", () => {
       tabs = inspectSourceTabs();
       return (
-        tabs.length + " source tabs found. Source cells will not be changed."
+        tabs.length +
+        " source tabs found. Response columns are imported read-only; optional attendance export uses FRFS Attendance."
       );
     });
   else

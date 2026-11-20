@@ -122,13 +122,32 @@ function staffCall(token, method, args) {
     throw new Error(
       "DEVICE_ACCESS_REQUIRED: This iPad needs coordinator setup.",
     );
-  const device = locked_(() =>
-    deviceTable_("Devices").find((d) => d.tokenHash === digest_(token)),
-  );
-  if (!device || device.revokedAt || Date.parse(device.expiresAt) <= Date.now())
-    throw new Error(
-      "DEVICE_ACCESS_REQUIRED: This iPad’s authorization has expired or been revoked.",
+  const device = locked_(() => {
+    const d = deviceTable_("Devices").find(
+      (d) => d.tokenHash === digest_(token),
     );
+    if (
+      !d ||
+      d.revokedAt ||
+      !Number.isFinite(Date.parse(d.expiresAt)) ||
+      Date.parse(d.expiresAt) <= Date.now()
+    )
+      throw new Error(
+        "DEVICE_ACCESS_REQUIRED: This iPad’s authorization has expired or been revoked.",
+      );
+    const days = config_().deviceSessionDays ?? 180;
+    if (!Number.isInteger(days) || days < 1 || days > 365)
+      throw new Error(
+        "Coordinator must configure deviceSessionDays between 1 and 365.",
+      );
+    // At most one write per day; successful use renews this device's rolling session.
+    if (!d.lastSeenAt || Date.now() - Date.parse(d.lastSeenAt) >= 86400000) {
+      d.lastSeenAt = now_();
+      d.expiresAt = new Date(Date.now() + days * 86400000).toISOString();
+      save_("Devices", d);
+    }
+    return d;
+  });
   if (!Array.isArray(args) || args.length > 2)
     throw new Error("Invalid device request.");
   deviceContext_ = device;
@@ -146,6 +165,7 @@ function listDeviceAccess() {
       label: d.label,
       createdAt: d.createdAt,
       expiresAt: d.expiresAt,
+      lastSeenAt: d.lastSeenAt || null,
       revokedAt: d.revokedAt,
     })),
   );

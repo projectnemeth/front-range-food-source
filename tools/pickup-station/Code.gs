@@ -3,7 +3,7 @@
 // Version stamp. Change it with every code change; the page compares it with its own stamp
 // so a coordinator can see whether both deployments run the latest code.
 function getBuild() {
-  return "2026-11-05.6";
+  return "2026-11-20.3";
 }
 function config_() {
   const props = PropertiesService.getScriptProperties();
@@ -383,7 +383,10 @@ function renderZpl_(r, p, copies, arrival) {
     for (let i = 1; i < words.length; i++) {
       const a = words.slice(0, i).join(" "),
         b = words.slice(i).join(" ");
-      if (!best || Math.max(a.length, b.length) < Math.max(best[0].length, best[1].length))
+      if (
+        !best ||
+        Math.max(a.length, b.length) < Math.max(best[0].length, best[1].length)
+      )
         best = [a, b];
     }
     return best || [name];
@@ -407,14 +410,26 @@ function renderZpl_(r, p, copies, arrival) {
   let y = m;
   function field(text, h, w, x, reverse) {
     out.push(
-      "^FO" + x + "," + y + "^A0N," + h + "," + w + (reverse ? "^FR" : "") +
-        "^FH_^FD" + hex_(text) + "^FS",
+      "^FO" +
+        x +
+        "," +
+        y +
+        "^A0N," +
+        h +
+        "," +
+        w +
+        (reverse ? "^FR" : "") +
+        "^FH_^FD" +
+        hex_(text) +
+        "^FS",
     );
   }
   function line(text, h, gapAfter) {
     const w = room(text, h);
     if (w < 0.45 * h)
-      throw new Error("Label text does not fit this label: " + text.length + " characters.");
+      throw new Error(
+        "Label text does not fit this label: " + text.length + " characters.",
+      );
     field(text, h, w, m, false);
     y += h + Math.round(gapAfter * u);
   }
@@ -437,11 +452,28 @@ function renderZpl_(r, p, copies, arrival) {
     field(number, numH, numH, m, false);
     y = top;
     out.push(
-      "^FO" + boxX + "," + top + "^GB" + boxW + "," + boxH + "," +
-        (arrival.line === "orange" ? boxH : Math.max(3, Math.round(0.03 * p.dpi))) + "^FS",
+      "^FO" +
+        boxX +
+        "," +
+        top +
+        "^GB" +
+        boxW +
+        "," +
+        boxH +
+        "," +
+        (arrival.line === "orange"
+          ? boxH
+          : Math.max(3, Math.round(0.03 * p.dpi))) +
+        "^FS",
     );
     y = top + Math.round((boxH - wordH) / 2);
-    field(word, wordH, wordW, boxX + Math.round((boxW - word.length * CF * wordW) / 2), arrival.line === "orange");
+    field(
+      word,
+      wordH,
+      wordW,
+      boxX + Math.round((boxW - word.length * CF * wordW) / 2),
+      arrival.line === "orange",
+    );
     y = top + boxH + Math.round(0.3 * u);
   }
   if (prepacked) {
@@ -451,9 +483,17 @@ function renderZpl_(r, p, copies, arrival) {
       text = "PRE-PACKED PICKUP",
       w = room(text, textH, aw - Math.round(0.6 * u)),
       top = y;
-    out.push("^FO" + m + "," + top + "^GB" + aw + "," + barH + "," + barH + "^FS");
+    out.push(
+      "^FO" + m + "," + top + "^GB" + aw + "," + barH + "," + barH + "^FS",
+    );
     y = top + Math.round((barH - textH) / 2);
-    field(text, textH, w, m + Math.max(0, Math.round((aw - text.length * CF * w) / 2)), true);
+    field(
+      text,
+      textH,
+      w,
+      m + Math.max(0, Math.round((aw - text.length * CF * w) / 2)),
+      true,
+    );
     y = top + barH + Math.round(0.25 * u);
   }
   nameLines.forEach((t, i) => {
@@ -487,6 +527,19 @@ function arrival_(input, required) {
     throw new Error("Keep the vehicle description to 30 characters.");
   return { number, line, vehicle };
 }
+// Pre-packed is a fulfillment choice; prior no-show is history, not absence today.
+function prepackedReason_(value) {
+  if (value == null || value === "") return null;
+  if (!["noShow", "walkUp"].includes(value))
+    throw new Error("Choose No Show or Walk Up for this pre-packed pickup.");
+  return value;
+}
+function applyPrepacked_(r, reason) {
+  if (!reason) return;
+  r.prepackedReason = reason;
+  r.previousNoShow = reason === "noShow";
+  r.pickupType = "prepacked";
+}
 function requestAction(request) {
   const actor = actor_(false);
   if (
@@ -502,6 +555,7 @@ function requestAction(request) {
     request.copies > 3
   )
     throw new Error("Choose 1–3 copies.");
+  const prepackedReason = prepackedReason_(request.prepackedReason);
   const arrivalInput = ["checkin", "checkinOnly"].includes(request.action)
     ? arrival_(request.arrival, true)
     : request.action === "reprint"
@@ -531,6 +585,7 @@ function requestAction(request) {
         r.checkedInBy = previous.actor;
         r.arrivalJobId = previous.id;
         r.arrival = previous.arrival || null;
+        applyPrepacked_(r, previous.prepackedReason);
         save_("Registrations", r);
       }
       return { record: r, job: previous, reused: true };
@@ -554,6 +609,7 @@ function requestAction(request) {
         r.checkedInBy = orphan.actor;
         r.arrivalJobId = orphan.id;
         r.arrival = orphan.arrival || null;
+        applyPrepacked_(r, orphan.prepackedReason);
         save_("Registrations", r);
         return { record: r, job: orphan, reused: true };
       }
@@ -569,6 +625,8 @@ function requestAction(request) {
     }
     if (request.action === "reprint" && clean_(request.reason).length < 5)
       throw new Error("Enter a reprint reason (at least five characters).");
+    if (["checkin", "checkinOnly"].includes(request.action))
+      applyPrepacked_(r, prepackedReason);
     if (request.action === "checkinOnly") {
       r.checkedInAt = now_();
       r.checkedInBy = actor;
@@ -603,6 +661,7 @@ function requestAction(request) {
       status: "Prepared",
       station: config_().stationName || "Packing station",
       printerId: p.id,
+      prepackedReason: r.prepackedReason || null,
       snapshot: {
         name: r.name,
         phone: r.phone,
@@ -650,10 +709,13 @@ function addWalkIn(request) {
   });
   if (data.errors.length) throw new Error(data.errors.join(" "));
   arrival_(request.arrival, true);
+  const prepackedReason = prepackedReason_(request.prepackedReason) || "walkUp";
   const print = request.print !== false;
   if (
     print &&
-    (!Number.isInteger(request.copies) || request.copies < 1 || request.copies > 3)
+    (!Number.isInteger(request.copies) ||
+      request.copies < 1 ||
+      request.copies > 3)
   )
     throw new Error("Choose 1–3 copies.");
   const record = locked_(() => {
@@ -668,6 +730,8 @@ function addWalkIn(request) {
       revision: 1,
       walkIn: true,
       pickupType: "prepacked",
+      prepackedReason,
+      previousNoShow: prepackedReason === "noShow",
       sourceKind: "walkin",
       walkInToken: request.token,
       addedBy: actor,

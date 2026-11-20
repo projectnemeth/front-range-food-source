@@ -45,6 +45,13 @@ function digest_(text) {
 function parseSourceRows_(headers, rows, mapping) {
   const columns = {},
     cleaned = headers.map(clean_);
+  // The November layout retains timestamps in A but leaves A1 blank. Accept only
+  // this known missing Date heading; never guess a different required column.
+  const assumedDateColumn =
+    clean_(mapping.submittedAt) === "Date" &&
+    cleaned[0] === "" &&
+    !cleaned.includes("Date");
+  if (assumedDateColumn) cleaned[0] = "Date";
   for (const field of [
     "externalId",
     "submittedAt",
@@ -106,6 +113,7 @@ function parseSourceRows_(headers, rows, mapping) {
   });
   return {
     sourceRows,
+    assumedDateColumn,
     groups,
     ignoredAfterList,
     lastListRow: lastNamed >= 0 ? lastNamed + 2 : null,
@@ -138,11 +146,14 @@ function readSheetSource_() {
     // Display values preserve phone and identifier formatting. Header mapping ignores trailing spaces.
     const headers = tab.getRange(1, 1, 1, width).getDisplayValues()[0];
     parseSourceRows_(headers, [], source.columns || {}); // Validate before reading data.
+    const effectiveHeaders = headers.map(clean_);
+    if (!effectiveHeaders[0] && clean_(source.columns.submittedAt) === "Date")
+      effectiveHeaders[0] = "Date";
     const mappedWidth =
       1 +
       Math.max(
         ...Object.values(source.columns).map((header) =>
-          headers.map(clean_).indexOf(clean_(header)),
+          effectiveHeaders.indexOf(clean_(header)),
         ),
       );
     const rows =
@@ -165,6 +176,7 @@ function previewSheetImport() {
     eventLabel: p.event.label,
     tabTitle: p.tabTitle,
     sourceRows: p.sourceRows,
+    assumedDateColumn: p.assumedDateColumn,
     lastListRow: p.lastListRow,
     ignoredAfterList: p.ignoredAfterList,
     households: p.groups.size,

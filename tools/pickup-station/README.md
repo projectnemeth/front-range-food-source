@@ -29,6 +29,7 @@ Standalone phase-one pilot implementation. A volunteer finds an existing registr
 - `Code.gs`: Apps Script server, direct-Form adapter, storage, ZPL renderer, and PrintNode transport.
 - `Sheets.gs`: read-only source-sheet adapter, tab preview, and duplicate-review decisions.
 - `Access.gs`: device enrollment, authorization, and revocation.
+- `Attendance.gs`: optional attendance mirror in the original workbook and scheduled export.
 - `Operations.gs`: coordinator setup and read-only print-service job diagnostics.
 - `Index.html`: iPad interface; demo mode when opened outside Apps Script.
 - `appsscript.json`: runtime and OAuth scopes.
@@ -45,7 +46,7 @@ All 83 automated tests pass: 55 server/service tests and twenty-eight client wor
 ## Google deployment — sheet source
 
 1. Under a maintained coordinator Google account, create a **new standalone Apps Script project** and a **separate working Google Sheet**. Do not bind the script to a sheet shared with volunteers: script editors can access script properties and the printing secret.
-2. Copy `Code.gs`, `Sheets.gs`, `Operations.gs`, `Access.gs`, `Index.html` (HTML file named `Index`), and `appsscript.json` into the project. All six files are required. Enable showing the manifest in project settings if necessary.
+2. Copy `Code.gs`, `Sheets.gs`, `Operations.gs`, `Access.gs`, `Attendance.gs`, `Index.html` (HTML file named `Index`), and `appsscript.json` into the project. All seven files are required. Enable showing the manifest in project settings if necessary.
 3. Set the script property `CONFIG` using `config.sheet.example.json`. The column mapping is already filled from read-only inspection; replace `SOURCE_RESPONSE_SPREADSHEET_ID` with the response sheet's ID and set the example event's `sourceSheetId` to the pickup tab's numeric ID (or enable the tab from **Check setup**). Real IDs, coordinator emails and a copy of the live CONFIG belong in an untracked `config.json`, never in the repository, which is public. Set `sheetId` to the **new working spreadsheet**, never the original response sheet; the code rejects a matching source and working ID.
 4. Choose the actual pilot pickup event. The sample includes the observed October 17, 2026 tab **disabled**, because it is historical. After deployment, use **Coordinator tools → Check setup** to select a verified tab, enter its pickup label, and explicitly enable it. Alternatively, run `inspectSourceTabs()` in the editor to obtain tab IDs and configure the event there. A tab's title can change without changing identity. Do not reuse a previously imported tab for a different event.
 5. Set `authMode` to `devices`, leave `staff` empty, and enter coordinator Google emails in `admins`, then the PrintNode printer ID, measured stock size, and DPI. Put the PrintNode service credential in a **separate script property** `PRINTNODE_API_KEY`, never in the HTML, spreadsheet, repository, or chat. Import/duplicate review can be tested before the printer is configured.
@@ -118,3 +119,43 @@ The packing-station screen is optional. With two car-line iPads and no packing s
 - [PrintNode Windows/network printing](https://www.printnode.com/en/faq).
 - [Apps Script web-app identity](https://developers.google.com/apps-script/guides/web).
 - [Google FormResponse IDs](https://developers.google.com/apps-script/reference/forms/form-response).
+
+## November 20 update — pre-packed reasons and latest-tab import
+
+Build `2026-11-20.1` adds mutually exclusive **No Show** / **Walk Up** checkboxes to the Pre-Packed Pickup form and an optional Pre-Packed section on existing expected households. No Show means **Previous No-Show**: successful check-in records today's arrival, excludes the household from Expected, and retains the previous-no-show badge in the pickup list, details, and packing view. It does not mark someone absent today. Walk Up is the default for new pre-packed entries. Both reasons use the existing pre-packed label bar. Source refreshes preserve the selection, and interrupted arrival writes recover the reason from the saved print job.
+
+The inspected latest response tab has a blank A1 where the Date header normally appears. The importer now accepts a blank first header as Date only when the configured timestamp header is exactly Date and no Date header already exists; other missing or ambiguous headers still fail. Import preview explicitly reports this assumption. No source cells are edited. The empty-event message now distinguishes refreshing the saved list from importing source responses.
+
+To install: replace **Code.gs**, **Sheets.gs**, and **Index.html** in the existing Apps Script project. Update **both** staff and coordinator deployments to a new version, then reload the app (build stamp `2026-11-20.1`). In Coordinator tools select the intended tab, preview the import, then use **Refresh source data**. Enabling an event alone does not import households. Other source data validation/repeated-ID review still applies. Keep existing CONFIG and PRINTNODE_API_KEY; no new properties or schema migration are required.
+
+Validation: 90 automated tests using mocked services and an in-memory DOM. The tests cover blank-header import, required-header rejection, previous-no-show arrival/persistence, interrupted-write recovery, exclusive checkboxes, packing visibility, and the Expected filter. Live deployment and physical output are not verified by these tests.
+
+## Previous No-Show filter — build 2026-11-20.2
+
+The **Show households** dropdown now includes **Previous No-Show** alongside Expected, Arrived, and Needs attention. It selects saved previous-no-show classifications while preserving today's arrival status and normal name/phone search. Both the boolean flag and saved `prepackedReason: noShow` are recognized. Existing marked households need no migration or re-entry. The packing view continues to show all arrivals independently of the pickup-list filter.
+
+Replace Index.html and Code.gs and update both existing deployments to a new version; reload and verify build 2026-11-20.2. No Script Property changes or source re-import are needed for this filter. The deployment bundle includes the earlier latest-tab import fix too.
+
+## Build 2026-11-20.3 — access resilience and attendance history
+
+**Local only; not deployed or written to a live workbook by this update.** 99 automated tests pass. Tests include rolling device access, actual expiry/revocation, a transient startup error, session-storage fallback, attendance export, formula escaping, preserving prior exported events, and failed/unauthorized writes.
+
+### iPad access
+
+The setup PIN remains single-use and valid for 15 minutes; that is separate from the enrolled device's session. Valid device sessions now renew for `deviceSessionDays` (default 180) on successful use, with server writes limited to once per day. Expired or revoked sessions cannot renew. Local storage remains the persistent browser credential, with session storage as a same-tab reload fallback. Connection/service failures preserve credentials and show a reconnect message instead of an enrollment screen. The iPad device list includes last-seen time in its response for diagnostics.
+
+An hour-long logout has not been reproduced on real equipment. Safari/private browsing, clearing site storage, a different browser/shortcut, a changed Apps Script deployment URL, and Apps Script iframe storage can still lose browser authorization. This patch cannot guarantee weeks of persistence under those conditions. Use the same existing staff `/exec` URL, outside Private Browsing; update existing deployments rather than creating new ones. A stable first-party hosted site with persistent server cookies is the recommended longer-term fix.
+
+### Attendance in the original workbook
+
+Until enabled, statuses remain in the separate working workbook. Expected is derived from no `checkedInAt`; Arrived is derived from a saved timestamp. Previous No-Show is independent history. Needs attention also includes current printing/data problems; it is not itself attendance.
+
+After deployment, open **Coordinator tools → Attendance history in Google Sheets**. **Sync attendance now** creates/updates `FRFS Attendance` in the configured original response workbook. **Enable five-minute attendance sync** performs a first export, verifies permission, and installs a coordinator-owned scheduled trigger. The coordinator needs Editor access to the original workbook. Install under one maintained account only. Staff iPads cannot call these coordinator methods. Source response tabs/columns remain untouched by the export.
+
+Each row is keyed by the original registration ID, not a remembered row number or name, and includes event ID/name, source ID/tab, name, phone, household size, Expected/Arrived, UTC check-in timestamp, Previous No-Show, pre-packed reason, car number/line/vehicle, source-review flag, and export time. Walk-ups are included. Re-export updates the same row; previously exported records remain if no longer in working storage. Conflicting pre-existing destination headers and duplicate destination IDs stop the export. Do not edit this app-owned mirror manually or rename its columns. Working data remains authoritative; changing the mirror does not change the app. Do not import the attendance tab as a pickup event.
+
+Export runs separately from printing and check-in. No source permission error can roll back a saved arrival or cause an automatic reprint. View export errors/last export time in **Check setup**. Failed scheduled runs retry on the next scheduled run; perform a manual final export after pickup and verify its timestamp/counts before archiving working records. No individual historical attendance can be reconstructed if it was never recorded. Expected after pickup means no recorded check-in; the current pilot does not automatically close events and relabel those households No Show.
+
+### Installing this build
+
+Replace Code.gs, Access.gs, Operations.gs and Index.html; add **Attendance.gs** as a new script file. Keep the latest Sheets.gs (the bundle includes the previous import fix). Update both existing deployments to a new version and verify `2026-11-20.3`. No new secrets or CONFIG fields are required. The attendance export is opt-in using the coordinator buttons. See the repository's hosted migration plan for the normal-webpage replacement.

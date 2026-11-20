@@ -463,7 +463,7 @@ test("sorting source rows preserves arrival identity and revisions", () => {
     action: "checkin",
     copies: 1,
     token: "sheet-arrival-0001",
-        arrival: { number: "101", line: "orange", vehicle: "" },
+    arrival: { number: "101", line: "orange", vehicle: "" },
   });
   f.update(f.rows.slice().reverse());
   f.c.syncResponses();
@@ -545,7 +545,7 @@ test("removed arrived source record stays visible for reconciliation and cannot 
     action: "checkin",
     copies: 1,
     token: "sheet-arrival-0002",
-        arrival: { number: "101", line: "orange", vehicle: "" },
+    arrival: { number: "101", line: "orange", vehicle: "" },
   });
   f.update(f.rows.filter((row) => row[1] !== "R100"));
   f.c.syncResponses();
@@ -748,7 +748,11 @@ test("one-time device enrollment stores only hashes and permits staff actions wi
   const raw = JSON.stringify(f.tables);
   assert.ok(!raw.includes(session.token));
   assert.match(code, /^\d{4}$/);
-  assert.ok(f.c.read_("Enrollments").every((e) => Object.values(e).every((v) => v !== code)));
+  assert.ok(
+    f.c
+      .read_("Enrollments")
+      .every((e) => Object.values(e).every((v) => v !== code)),
+  );
   const result = f.c.staffCall(session.token, "requestAction", [f.request()]);
   assert.ok(result.checkedInAt);
   assert.match(f.c.read_("Registrations")[0].checkedInBy, /^device:/);
@@ -828,7 +832,9 @@ test("list ends at the last named row; totals below it are ignored and counted",
   const result = f.c.syncResponses();
   assert.equal(result.imported, 2);
   assert.equal(result.ignoredAfterList, 2);
-  assert.ok(f.c.listRegistrations("event").every((r) => r.externalId !== "TOTAL"));
+  assert.ok(
+    f.c.listRegistrations("event").every((r) => r.externalId !== "TOTAL"),
+  );
 });
 test("a nameless row inside the list is imported for review, not used to end the list", () => {
   const f = sheetFixture();
@@ -841,7 +847,9 @@ test("a nameless row inside the list is imported for review, not used to end the
   const result = f.c.syncResponses();
   assert.equal(result.imported, 3);
   assert.equal(result.ignoredAfterList, 1);
-  const nameless = f.c.listRegistrations("event").find((r) => r.externalId === "R150");
+  const nameless = f.c
+    .listRegistrations("event")
+    .find((r) => r.externalId === "R150");
   assert.ok(nameless.errors.some((e) => /Name/.test(e)));
 });
 test("a row without name or ID inside the list still stops the import unchanged", () => {
@@ -849,7 +857,10 @@ test("a row without name or ID inside the list still stops the import unchanged"
   f.c.syncResponses();
   const before = JSON.stringify(f.tables.Registrations);
   f.update([f.rows[0], ["", "", "", "", "4"], ...f.rows.slice(1)]);
-  assert.throws(() => f.c.syncResponses(), /Missing or invalid ID# at source row 3, inside the list/);
+  assert.throws(
+    () => f.c.syncResponses(),
+    /Missing or invalid ID# at source row 3, inside the list/,
+  );
   assert.equal(JSON.stringify(f.tables.Registrations), before);
 });
 
@@ -857,19 +868,28 @@ const decode = (call) =>
   Buffer.from(JSON.parse(call.options.payload).content, "base64").toString();
 test("check-in requires a 3-digit number and a blue or orange line", () => {
   const f = fixture();
-  assert.throws(() => f.c.requestAction(f.request({ arrival: undefined })), /car line/);
   assert.throws(
-    () => f.c.requestAction(f.request({ arrival: { number: "12", line: "blue" } })),
+    () => f.c.requestAction(f.request({ arrival: undefined })),
+    /car line/,
+  );
+  assert.throws(
+    () =>
+      f.c.requestAction(f.request({ arrival: { number: "12", line: "blue" } })),
     /3-digit/,
   );
   assert.throws(
-    () => f.c.requestAction(f.request({ arrival: { number: "123", line: "green" } })),
+    () =>
+      f.c.requestAction(
+        f.request({ arrival: { number: "123", line: "green" } }),
+      ),
     /blue or orange/,
   );
   assert.throws(
     () =>
       f.c.requestAction(
-        f.request({ arrival: { number: "123", line: "blue", vehicle: "x".repeat(31) } }),
+        f.request({
+          arrival: { number: "123", line: "blue", vehicle: "x".repeat(31) },
+        }),
       ),
     /30 characters/,
   );
@@ -879,14 +899,20 @@ test("arrival label prints number, line and vehicle; arrival is saved with the r
   const f = fixture();
   const result = f.c.requestAction(f.request());
   const plain = (x) => JSON.parse(JSON.stringify(x));
-  assert.deepEqual(plain(result.arrival), { number: "123", line: "blue", vehicle: "Tan van" });
+  assert.deepEqual(plain(result.arrival), {
+    number: "123",
+    line: "blue",
+    vehicle: "Tan van",
+  });
   assert.deepEqual(plain(result.job.arrival), plain(result.arrival));
   const zpl = decode(f.calls[0]);
   assert.ok(zpl.includes(f.c.hex_("#123")));
   assert.ok(zpl.includes(f.c.hex_("BLUE")));
   assert.ok(zpl.includes(f.c.hex_("Tan van")));
   assert.ok(!zpl.includes("^FR"));
-  const record = f.c.listRegistrations(f.record.eventId).find((r) => r.id === f.record.id);
+  const record = f.c
+    .listRegistrations(f.record.eventId)
+    .find((r) => r.id === f.record.id);
   assert.equal(record.arrival.number, "123");
 });
 test("orange line prints as a reversed box so lines differ at a glance", () => {
@@ -902,16 +928,32 @@ test("orange line prints as a reversed box so lines differ at a glance", () => {
 });
 test("two-line name with all arrival fields fits a 3 x 2 inch label at 203 and 300 dpi", () => {
   const f = fixture();
-  const r = { name: "Maria Guadalupe Hernandez-Rodriguez", phone: "(303) 555-0142 ext 12", householdSize: 12 };
-  const a = { number: "999", line: "orange", vehicle: "Silver minivan with roof rack" };
+  const r = {
+    name: "Maria Guadalupe Hernandez-Rodriguez",
+    phone: "(303) 555-0142 ext 12",
+    householdSize: 12,
+  };
+  const a = {
+    number: "999",
+    line: "orange",
+    vehicle: "Silver minivan with roof rack",
+  };
   for (const dpi of [203, 300])
-    assert.match(f.c.renderZpl_(r, { ...f.config.printer, dpi }, 3, a), /\^PQ3/);
+    assert.match(
+      f.c.renderZpl_(r, { ...f.config.printer, dpi }, 3, a),
+      /\^PQ3/,
+    );
 });
 test("reprint after arrival reuses saved car details unless corrected", () => {
   const f = fixture();
   f.c.requestAction(f.request());
   f.c.requestAction(
-    f.request({ action: "reprint", token: "reprint-token-0010", reason: "Jammed roll", arrival: undefined }),
+    f.request({
+      action: "reprint",
+      token: "reprint-token-0010",
+      reason: "Jammed roll",
+      arrival: undefined,
+    }),
   );
   assert.ok(decode(f.calls[1]).includes(f.c.hex_("#123")));
   f.c.requestAction(
@@ -923,8 +965,14 @@ test("reprint after arrival reuses saved car details unless corrected", () => {
     }),
   );
   assert.ok(decode(f.calls[2]).includes(f.c.hex_("#321")));
-  const record = f.c.listRegistrations(f.record.eventId).find((r) => r.id === f.record.id);
-  assert.deepEqual(JSON.parse(JSON.stringify(record.arrival)), { number: "321", line: "orange", vehicle: "Red truck" });
+  const record = f.c
+    .listRegistrations(f.record.eventId)
+    .find((r) => r.id === f.record.id);
+  assert.deepEqual(JSON.parse(JSON.stringify(record.arrival)), {
+    number: "321",
+    line: "orange",
+    vehicle: "Red truck",
+  });
 });
 test("advance labels do not carry car details", () => {
   const f = fixture();
@@ -934,7 +982,10 @@ test("advance labels do not carry car details", () => {
 
 test("server build stamp matches the page stamp", () => {
   const f = fixture();
-  const html = require("node:fs").readFileSync(require("node:path").join(__dirname, "../Index.html"), "utf8");
+  const html = require("node:fs").readFileSync(
+    require("node:path").join(__dirname, "../Index.html"),
+    "utf8",
+  );
   assert.equal(f.c.getBuild(), html.match(/const clientBuild = "([^"]+)"/)[1]);
 });
 
@@ -945,9 +996,13 @@ test("setup PIN is 4 digits; five wrong PINs cancel waiting PINs", () => {
   f.actor("");
   assert.throws(() => f.c.enrollDevice("12ab"), /4-digit/);
   const wrong = pin === "0000" ? "0001" : "0000";
-  for (let i = 0; i < 4; i++) assert.throws(() => f.c.enrollDevice(wrong), /incorrect/);
+  for (let i = 0; i < 4; i++)
+    assert.throws(() => f.c.enrollDevice(wrong), /incorrect/);
   assert.throws(() => f.c.enrollDevice(wrong), /Too many incorrect PINs/);
-  assert.throws(() => f.c.enrollDevice(pin), /incorrect, expired, or already used/);
+  assert.throws(
+    () => f.c.enrollDevice(pin),
+    /incorrect, expired, or already used/,
+  );
   f.actor("admin@example.test");
   const fresh = f.c.createDeviceEnrollment({ label: "iPad A" }).code;
   f.actor("");
@@ -956,13 +1011,18 @@ test("setup PIN is 4 digits; five wrong PINs cancel waiting PINs", () => {
 test("a correct PIN resets the wrong-attempt count, and waiting PINs never collide", () => {
   const f = deviceFixture();
   const pins = [];
-  for (let i = 0; i < 30; i++) pins.push(f.c.createDeviceEnrollment({ label: "iPad " + i }).code);
+  for (let i = 0; i < 30; i++)
+    pins.push(f.c.createDeviceEnrollment({ label: "iPad " + i }).code);
   assert.equal(new Set(pins).size, pins.length);
   f.actor("");
-  const wrong = ["0000", "0001", "0002", "0003", "0004", "0005"].find((x) => !pins.includes(x));
-  for (let i = 0; i < 4; i++) assert.throws(() => f.c.enrollDevice(wrong), /incorrect/);
+  const wrong = ["0000", "0001", "0002", "0003", "0004", "0005"].find(
+    (x) => !pins.includes(x),
+  );
+  for (let i = 0; i < 4; i++)
+    assert.throws(() => f.c.enrollDevice(wrong), /incorrect/);
   f.c.enrollDevice(pins[0]);
-  for (let i = 0; i < 4; i++) assert.throws(() => f.c.enrollDevice(wrong), /incorrect/);
+  for (let i = 0; i < 4; i++)
+    assert.throws(() => f.c.enrollDevice(wrong), /incorrect/);
   assert.equal(f.c.enrollDevice(pins[1]).label, "iPad 1");
 });
 
@@ -971,22 +1031,34 @@ test("text scales to fill a 2.25 x 1.25 inch label at 300 dpi", () => {
   const p = { ...f.config.printer, dpi: 300, widthIn: 2.25, heightIn: 1.25 };
   const z = f.c.renderZpl_(
     { name: "Avery Sample", phone: "3035550188", householdSize: 7 },
-    p, 2, { number: "112", line: "blue", vehicle: "Silver Truck" },
+    p,
+    2,
+    { number: "112", line: "blue", vehicle: "Silver Truck" },
   );
   assert.match(z, /\^PW675\n\^LL375/);
-  const heights = [...z.matchAll(/\^A0N,(\d+),(\d+)/g)].map((x) => Number(x[1]));
+  const heights = [...z.matchAll(/\^A0N,(\d+),(\d+)/g)].map((x) =>
+    Number(x[1]),
+  );
   assert.ok(Math.max(...heights) >= 70, "car number is large");
   assert.ok(heights.filter((h) => h >= 60).length >= 2, "name is large");
   assert.ok(Math.min(...heights) >= 40, "details stay readable");
-  const tops = [...z.matchAll(/\^FO\d+,(\d+)\^A0N,(\d+)/g)].map((x) => Number(x[1]) + Number(x[2]));
+  const tops = [...z.matchAll(/\^FO\d+,(\d+)\^A0N,(\d+)/g)].map(
+    (x) => Number(x[1]) + Number(x[2]),
+  );
   assert.ok(Math.max(...tops) <= 375, "nothing runs off the bottom");
 });
 test("long name, vehicle and phone still fit the small label", () => {
   const f = fixture();
   const p = { ...f.config.printer, dpi: 300, widthIn: 2.25, heightIn: 1.25 };
   const z = f.c.renderZpl_(
-    { name: "Maria Guadalupe Hernandez-Rodriguez", phone: "(303) 555-0142 ext 12", householdSize: 12 },
-    p, 1, { number: "045", line: "orange", vehicle: "Silver minivan with roof rack" },
+    {
+      name: "Maria Guadalupe Hernandez-Rodriguez",
+      phone: "(303) 555-0142 ext 12",
+      householdSize: 12,
+    },
+    p,
+    1,
+    { number: "045", line: "orange", vehicle: "Silver minivan with roof rack" },
   );
   assert.ok(z.includes("^FR"));
   assert.equal((z.match(/\^FO/g) || []).length, 8);
@@ -1024,11 +1096,23 @@ test("walk-up becomes a Pre-Packed Pickup: added, checked in and printed once", 
 test("walk-up requires a name, household size, number and an active event", () => {
   const f = fixture();
   assert.throws(() => f.c.addWalkIn(walkIn({ name: " " })), /Name/);
-  assert.throws(() => f.c.addWalkIn(walkIn({ householdSize: 0 })), /household size/);
-  assert.throws(() => f.c.addWalkIn(walkIn({ arrival: { number: "1", line: "blue" } })), /3-digit/);
-  assert.throws(() => f.c.addWalkIn(walkIn({ eventId: "nope" })), /pickup event/);
+  assert.throws(
+    () => f.c.addWalkIn(walkIn({ householdSize: 0 })),
+    /household size/,
+  );
+  assert.throws(
+    () => f.c.addWalkIn(walkIn({ arrival: { number: "1", line: "blue" } })),
+    /3-digit/,
+  );
+  assert.throws(
+    () => f.c.addWalkIn(walkIn({ eventId: "nope" })),
+    /pickup event/,
+  );
   assert.equal(f.calls.length, 0);
-  assert.equal(f.c.listRegistrations("event").filter((r) => r.walkIn).length, 0);
+  assert.equal(
+    f.c.listRegistrations("event").filter((r) => r.walkIn).length,
+    0,
+  );
 });
 test("refreshing the response sheet keeps walk-ups active", () => {
   const f = sheetFixture();
@@ -1044,10 +1128,107 @@ test("refreshing the response sheet keeps walk-ups active", () => {
 test("Pre-Packed bar fits a 3 x 2 label with a two-line name and vehicle", () => {
   const f = fixture();
   const z = f.c.renderZpl_(
-    { name: "Maria Guadalupe Hernandez-Rodriguez", phone: "No phone", householdSize: 12, pickupType: "prepacked" },
+    {
+      name: "Maria Guadalupe Hernandez-Rodriguez",
+      phone: "No phone",
+      householdSize: 12,
+      pickupType: "prepacked",
+    },
     { ...f.config.printer, dpi: 203, widthIn: 3, heightIn: 2 },
     1,
     { number: "045", line: "orange", vehicle: "Silver minivan with roof rack" },
   );
   assert.equal((z.match(/\^FR/g) || []).length, 2);
+});
+
+test("latest layout with blank A1 imports timestamps without guessing other headers", () => {
+  const f = sheetFixture();
+  f.headers[0] = "";
+  f.update(f.rows);
+  const preview = f.c.previewSheetImport()[0];
+  assert.equal(preview.assumedDateColumn, true);
+  assert.equal(preview.households, 2);
+  assert.equal(f.c.syncResponses().imported, 2);
+  assert.equal(
+    f.c.listRegistrations("event")[0].sourceSubmittedAt,
+    f.rows[0][0],
+  );
+  f.headers[0] = "Wrong header";
+  f.update(f.rows);
+  assert.throws(() => f.c.syncResponses(), /submittedAt/);
+  f.headers[0] = "";
+  f.headers[2] = "";
+  f.update(f.rows);
+  assert.throws(() => f.c.syncResponses(), /name/);
+});
+test("previous no-show is arrived today and remains classified across source refresh", () => {
+  const f = sheetFixture();
+  f.c.syncResponses();
+  const r = f.c.listRegistrations("event").find((r) => r.externalId === "R100");
+  f.c.requestAction(
+    f.request({ id: r.id, revision: r.revision, prepackedReason: "noShow" }),
+  );
+  f.c.syncResponses();
+  const saved = f.c.listRegistrations("event").find((x) => x.id === r.id);
+  assert.ok(saved.checkedInAt);
+  assert.equal(saved.previousNoShow, true);
+  assert.equal(saved.prepackedReason, "noShow");
+  assert.equal(saved.pickupType, "prepacked");
+  assert.ok(decode(f.calls[0]).includes(f.c.hex_("PRE-PACKED PICKUP")));
+});
+test("pre-packed no-show addition and arrival-only preserve history without duplicate jobs", () => {
+  const f = fixture();
+  const result = f.c.addWalkIn(
+    walkIn({ prepackedReason: "noShow", print: false }),
+  );
+  const r = f.c.listRegistrations("event").find((x) => x.id === result.id);
+  assert.ok(r.checkedInAt);
+  assert.equal(r.previousNoShow, true);
+  assert.equal(r.prepackedReason, "noShow");
+  assert.equal(f.calls.length, 0);
+  assert.equal(
+    f.c.addWalkIn(walkIn({ prepackedReason: "noShow", print: false })).id,
+    r.id,
+  );
+  assert.throws(
+    () =>
+      f.c.addWalkIn(
+        walkIn({ token: "walkin-bad-reason-0001", prepackedReason: "both" }),
+      ),
+    /Choose No Show or Walk Up/,
+  );
+});
+test("interrupted no-show arrival recovers classification from its saved job", () => {
+  const f = fixture();
+  f.failNextRegistration();
+  const request = f.request({ prepackedReason: "noShow" });
+  assert.throws(() => f.c.requestAction(request), /write failure/);
+  f.c.requestAction({ ...request, prepackedReason: "walkUp" });
+  const r = f.c.listRegistrations("event")[0];
+  assert.ok(r.checkedInAt);
+  assert.equal(r.previousNoShow, true);
+  assert.equal(f.calls.length, 1);
+});
+
+test("valid iPad sessions renew with use and cannot revive expired access", () => {
+  const f = deviceFixture();
+  const pin = f.c.createDeviceEnrollment({ label: "Weekly iPad" }).code;
+  f.actor("");
+  const token = f.c.enrollDevice(pin).token;
+  let device = f.c.read_("Devices")[0];
+  device.expiresAt = new Date(Date.now() + 3600000).toISOString();
+  device.lastSeenAt = new Date(Date.now() - 2 * 86400000).toISOString();
+  f.c.save_("Devices", device);
+  f.c.staffCall(token, "getStation", []);
+  device = f.c.read_("Devices")[0];
+  assert.ok(Date.parse(device.expiresAt) > Date.now() + 170 * 86400000);
+  const renewed = device.expiresAt;
+  f.c.staffCall(token, "getStation", []);
+  assert.equal(f.c.read_("Devices")[0].expiresAt, renewed);
+  device.expiresAt = new Date(Date.now() - 1000).toISOString();
+  f.c.save_("Devices", device);
+  assert.throws(
+    () => f.c.staffCall(token, "getStation", []),
+    /DEVICE_ACCESS_REQUIRED/,
+  );
 });
