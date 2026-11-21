@@ -108,3 +108,37 @@ test("malformed Firebase settings no longer crash route imports and produce stru
   assert.equal(result.healthBody.firebaseConfigured, false);
   assert.ok(!child.stdout.includes("sensitive-marker"));
 });
+
+test("Firebase Admin and real RSA signing keys work when require(esm) is disabled as on Vercel", () => {
+  const script = `
+ require('firebase-admin/auth');
+ const {generateKeyPairSync,createSign,createVerify}=require('node:crypto');
+ const {createRequire}=require('node:module');
+ const fromAdmin=createRequire(require.resolve('firebase-admin/auth'));
+ const {retrieveSigningKeys}=fromAdmin('jwks-rsa/src/utils.js');
+ (async()=>{
+ const {publicKey,privateKey}=generateKeyPairSync('rsa',{modulusLength:2048});
+ const keys=await retrieveSigningKeys([{...publicKey.export({format:'jwk'}),kid:'fixture-key',alg:'RS256',use:'sig'}]);
+ if(keys.length!==1)throw Error('Signing key unavailable');
+ const signature=createSign('RSA-SHA256').update('fixture-message').sign(privateKey);
+ const valid=createVerify('RSA-SHA256').update('fixture-message').verify(keys[0].getPublicKey(),signature);
+ const invalid=createVerify('RSA-SHA256').update('tampered-message').verify(keys[0].getPublicKey(),signature);
+ if(!valid||invalid)throw Error('Signature verification failed');
+ const rawHeader=Buffer.from(JSON.stringify({alg:'RS256',kid:'fixture-key'})).toString('base64url');
+ const rawPayload=Buffer.from(JSON.stringify({sub:'fixture'})).toString('base64url');
+ const unsigned=rawHeader+'.'+rawPayload;
+ const jwt=unsigned+'.'+createSign('RSA-SHA256').update(unsigned).sign(privateKey,'base64url');
+ const provider=fromAdmin('jwks-rsa').passportJwtSecret({jwksUri:'https://unused.test',cache:false,getKeysInterceptor:async()=>[{...publicKey.export({format:'jwk'}),kid:'fixture-key',alg:'RS256',use:'sig'}]});
+ const passportKey=await new Promise((resolve,reject)=>provider(null,jwt,(err,value)=>err?reject(err):resolve(value)));
+ if(!createVerify('RSA-SHA256').update(unsigned).verify(passportKey,Buffer.from(jwt.split('.')[2],'base64url')))throw Error('Passport callback verification failed');
+ process.stdout.write('verified');
+ })().catch(error=>{console.error(error);process.exitCode=1});
+ `;
+  const result = spawnSync(
+    process.execPath,
+    ["--no-experimental-require-module", "-e", script],
+    { cwd: process.cwd(), encoding: "utf8", timeout: 20000 },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, "verified");
+});
