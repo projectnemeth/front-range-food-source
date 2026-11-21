@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { z, ZodError } from "zod";
 import { adminDb } from "../firebase-admin";
 import { FirebaseConfigurationError } from "../firebase-admin-config";
@@ -228,7 +228,7 @@ export async function pickupPost(request: NextRequest) {
           ok: !attendance?.lastError,
           detail:
             attendance?.lastError ||
-            `Last export: ${attendance?.lastSync || "never"}. Scheduled export ${attendance?.enabled ? "enabled" : "disabled"}.`,
+            `Last export: ${attendance?.lastSync || "never"}. Automatic export ${attendance?.enabled !== false ? "enabled" : "paused"}. ${attendance?.dirty ? "Changes waiting to sync." : "Up to date."}`,
         });
         const events = await store.events();
         if (!events.length)
@@ -309,13 +309,18 @@ export async function pickupPost(request: NextRequest) {
         result = {
           ...(result as object),
           message:
-            "Attendance export to dated pickup tabs enabled. The authenticated worker schedule is also required; Sync attendance now remains available.",
+            "Automatic attendance export to dated pickup tabs enabled. Check-ins and list refreshes trigger background sync; an authenticated worker schedule provides an additional retry.",
         };
         break;
       case "setupStation":
         result =
           "Firebase storage is ready; no spreadsheet initialization is needed.";
         break;
+    }
+    if (["requestAction", "addWalkIn", "listRegistrations"].includes(method)) {
+      after(async () => {
+        await store.syncAttendance();
+      });
     }
     const response = NextResponse.json(result, {
       headers: { "Cache-Control": "private, no-store" },

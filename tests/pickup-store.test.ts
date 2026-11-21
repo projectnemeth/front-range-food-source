@@ -11,11 +11,7 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import { NextRequest } from "next/server";
 import { adminDb, adminAuth } from "../src/lib/firebase-admin";
 import { PickupStore } from "../src/lib/pickup/store";
-import {
-  key,
-  normalize,
-  type Registration,
-} from "../src/lib/pickup/model";
+import { key, normalize, type Registration } from "../src/lib/pickup/model";
 import {
   createPairing,
   pairDevice,
@@ -580,4 +576,53 @@ test("a source sort detected before writing leaves arrivals queued without updat
     (await adminDb.doc("pickupSync/attendance").get()).data()?.dirty,
     true,
   );
+});
+
+test("a walk-up is written to its dated tab by automatic attendance sync without enabling a schedule", async () => {
+  const created = await store.addWalkIn(
+    {
+      eventId: "sheet-12",
+      name: "Walk Up",
+      phone: "",
+      householdSize: 3,
+      copies: 1,
+      token: "automatic-walk-up-token",
+      arrival: { number: "009", line: "blue", vehicle: "" },
+      print: false,
+    },
+    "device:1",
+  );
+  assert.equal(await store.syncAttendance(), "synced");
+  const row = sourceGrid.find((row) => row.includes(created.id));
+  assert.ok(row);
+  assert.equal(row[5], "Arrived");
+  assert.equal(row[8], "Pre-Packed / Walk Up");
+  assert.equal(row[13], "Walk Up");
+  assert.equal(row[15], 3);
+  assert.equal(sends, 0);
+});
+
+test("enabled pickup events default to the newest dated tab", async () => {
+  await adminDb
+    .doc(`pickupEvents/${key("sheet-12")}`)
+    .update({ label: "Oct 17" });
+  await adminDb.doc(`pickupEvents/${key("sheet-13")}`).set({
+    id: "sheet-13",
+    label: "11/21/26",
+    sourceSheetId: 13,
+    enabled: true,
+  });
+  assert.equal((await store.events())[0].id, "sheet-13");
+});
+
+test("automatic attendance batches recent changes without clearing pending walk-ups", async () => {
+  await adminDb
+    .doc("pickupSync/attendance")
+    .set({ dirty: true, lastSync: new Date().toISOString() });
+  assert.equal(await store.syncAttendance(), "waiting for next refresh");
+  assert.equal(
+    (await adminDb.doc("pickupSync/attendance").get()).data()?.dirty,
+    true,
+  );
+  assert.equal(putRows.length, 0);
 });

@@ -106,6 +106,7 @@ test("hosted HTML uses same-origin API and server cookies, with no Google bridge
   assert.ok(html.includes('bootstrap.paired ? "hosted-cookie"'));
   assert.ok(html.includes('maxlength="6"'));
   assert.ok(html.includes(BUILD));
-  new vm.Script(html.match(/<script>([\s\S]*?)<\/script>/)![1]);
+  for (const script of html.matchAll(/<script>([\s\S]*?)<\/script>/g))
+    new vm.Script(script[1]);
   assert.ok(hostedHtml(true).includes('data-coordinator="true"'));
 });

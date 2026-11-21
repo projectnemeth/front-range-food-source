@@ -44,6 +44,7 @@ async function fixture(page: Page) {
       return;
     } else if (method === "getStation")
       value = {
+        actor: "device:test-ipad",
         admin: false,
         deviceLabel: "Test iPad",
         station: "Packing",
@@ -89,6 +90,27 @@ async function fixture(page: Page) {
           action: "checkin",
           createdAt: r.checkedInAt,
         },
+      };
+    } else if (method === "addWalkIn") {
+      const q = args[0];
+      expect(q.print).toBe(false);
+      const row = {
+        ...records[0],
+        id: "fictional-walkup",
+        name: q.name,
+        phone: q.phone || "No phone",
+        householdSize: q.householdSize,
+        checkedInAt: new Date().toISOString(),
+        arrival: q.arrival,
+        pickupType: "prepacked",
+        prepackedReason: "walkUp",
+      };
+      records.push(row);
+      value = {
+        id: row.id,
+        checkedInAt: row.checkedInAt,
+        arrival: row.arrival,
+        job: null,
       };
     } else throw Error("Unexpected pickup method " + method);
     await route.fulfill({
@@ -219,4 +241,90 @@ test("coordinator-only account signs in without a food-ordering profile", async 
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Signed in.");
   expect(f.profileReads()).toBe(0);
+});
+
+async function readyForCheckin(page: Page) {
+  await page.goto("/pickup");
+  await page.getByLabel("Setup PIN").fill("123456");
+  await page.getByRole("button", { name: "Authorize this iPad" }).click();
+  await page.getByRole("button", { name: "Blue line", exact: true }).click();
+  await page.getByRole("button", { name: /Fictional Household/ }).click();
+  for (const digit of ["0", "0", "7"])
+    await page.getByRole("button", { name: digit, exact: true }).click();
+}
+test("a disconnected iPad keeps a check-in pending then sends it once when Wi-Fi returns", async ({
+  page,
+  context,
+}) => {
+  const f = await fixture(page);
+  await readyForCheckin(page);
+  await context.setOffline(true);
+  await page
+    .getByRole("button", { name: "Check in to Blue line & print", exact: true })
+    .click();
+  await expect(page.locator("#outbox")).toContainText(
+    "1 check-in(s) saved on this iPad",
+  );
+  await expect(page.locator("#list")).toContainText("Waiting to sync");
+  expect(f.sends()).toBe(0);
+  await context.setOffline(false);
+  await expect.poll(f.sends).toBe(1);
+  await expect(page.locator("#outbox")).toBeHidden();
+  await expect(page.locator("#list")).toContainText("Arrived");
+  await page.reload();
+  await expect(page.locator("#list")).toContainText("Arrived");
+  expect(f.sends()).toBe(1);
+});
+test("a saved check-in survives reload and preserves its token after a network failure", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  let disconnected = true;
+  const tokens: string[] = [];
+  await page.route("**/api/pickup", async (route) => {
+    const body = route.request().postDataJSON();
+    if (body.method === "requestAction") {
+      tokens.push(body.args[0].token);
+      if (disconnected) {
+        await route.abort("failed");
+        return;
+      }
+    }
+    await route.fallback();
+  });
+  await readyForCheckin(page);
+  await page
+    .getByRole("button", { name: "Check in to Blue line & print", exact: true })
+    .click();
+  await expect(page.locator("#outbox")).toContainText("1 check-in(s)");
+  await page.reload();
+  await expect(page.locator("#outbox")).toContainText("1 check-in(s)");
+  disconnected = false;
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect.poll(f.sends).toBe(1);
+  await expect(page.locator("#outbox")).toBeHidden();
+  expect(new Set(tokens).size).toBe(1);
+});
+
+test("a walk-up box given without a label is saved offline and reported after reconnecting", async ({
+  page,
+  context,
+}) => {
+  const f = await fixture(page);
+  await readyForCheckin(page);
+  await page
+    .getByRole("button", { name: "+ Pre-Packed Pickup", exact: true })
+    .click();
+  await page.getByLabel("Name", { exact: true }).fill("Fictional Walk Up");
+  for (const digit of ["0", "0", "9"])
+    await page.getByRole("button", { name: digit, exact: true }).click();
+  await context.setOffline(true);
+  await page
+    .getByRole("button", { name: "Record box given (no label)", exact: true })
+    .click();
+  await expect(page.locator("#outbox")).toContainText("Fictional Walk Up");
+  await context.setOffline(false);
+  await expect(page.locator("#list")).toContainText("Fictional Walk Up");
+  await expect(page.locator("#outbox")).toBeHidden();
+  expect(f.sends()).toBe(0);
 });

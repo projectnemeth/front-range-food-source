@@ -1,3 +1,4 @@
+import { newestPickupEvents } from "./event-order";
 import { randomUUID } from "node:crypto";
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import { z } from "zod";
@@ -83,9 +84,17 @@ export class PickupStore {
     return this.db.doc(`pickupJobs/${id}`);
   }
   async events() {
-    return (await this.db.collection("pickupEvents").get()).docs
-      .map((d) => d.data() as PickupEvent)
-      .filter((e) => e.enabled);
+    return newestPickupEvents(
+      (await this.db.collection("pickupEvents").get()).docs
+        .map((d) => d.data() as PickupEvent)
+        .filter((e) => e.enabled),
+      Number(
+        new Intl.DateTimeFormat("en-US", {
+          timeZone: "America/Denver",
+          year: "numeric",
+        }).format(new Date()),
+      ),
+    );
   }
   async event(id: string) {
     const event = (
@@ -1013,24 +1022,40 @@ export class PickupStore {
       .limit(5)
       .get();
     for (const doc of prepared.docs) await this.dispatch(doc.id);
-    const sync = (await this.db.doc("pickupSync/attendance").get()).data();
-    let attendance = "not enabled";
-    if (sync?.enabled && sync.dirty) {
-      try {
+    return { prepared: prepared.size, attendance: await this.syncAttendance() };
+  }
+  async syncAttendance() {
+    const ref = this.db.doc("pickupSync/attendance");
+    const sync = (await ref.get()).data();
+    if (sync?.enabled === false || !sync?.dirty) return "not pending";
+    // Batch busy car-line arrivals; list refreshes/worker retry the retained dirty flag.
+    if (sync.lastSync && Date.now() - Date.parse(sync.lastSync) < 30000)
+      return "waiting for next refresh";
+    try {
+      // A second pass catches arrivals made while the first snapshot was exporting.
+      for (let attempt = 0; attempt < 2; attempt++) {
         await this.exportAttendance();
-        attendance = "synced";
-      } catch {
-        await this.db.doc("pickupSync/attendance").set(
-          {
-            lastError:
-              "Attendance export failed; check workbook access and retry.",
-            dirty: true,
-          },
-          { merge: true },
-        );
-        attendance = "retry pending";
+        if (!(await ref.get()).data()?.dirty) break;
       }
+      return "synced";
+    } catch (error) {
+      if (
+        error instanceof PickupError &&
+        error.status === 409 &&
+        error.message.includes("already running")
+      )
+        return "sync in progress";
+      await ref.set(
+        {
+          lastError:
+            error instanceof PickupError
+              ? error.message
+              : "Attendance export failed; check workbook access and retry.",
+          dirty: true,
+        },
+        { merge: true },
+      );
+      return "retry pending";
     }
-    return { prepared: prepared.size, attendance };
   }
 }
