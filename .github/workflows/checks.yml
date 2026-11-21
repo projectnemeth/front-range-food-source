@@ -22,11 +22,14 @@ jobs:
         run: npm test
         working-directory: tools/pickup-station
       - run: npm run test:emulator
+      - name: Hosted pickup emulator tests
+        run: npm run test:pickup:emulator
       - run: npm run build:test
       - run: npx playwright install --with-deps chromium
       - name: Browser regression with Phase Two enabled in emulators
         env:
           FULFILLMENT_PHASE_TWO_ENABLED: "true"
+          PICKUP_HOSTED_ENABLED: "true"
         run: node scripts/test-env.mjs ./node_modules/.bin/firebase emulators:exec --project demo-food-source --only auth,firestore "npm run test:browser"
       - uses: actions/upload-artifact@v4
         if: always()

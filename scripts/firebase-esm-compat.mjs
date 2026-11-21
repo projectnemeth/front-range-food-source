@@ -2,9 +2,10 @@
 // Vercel's loader disables require(esm). Retain jose 6 and import it lazily in
 // the async signing-key path and callback-based Passport integration.
 // Remove this patch when upstream ships a compatible implementation.
-const fs = require("node:fs");
-const { createHash } = require("node:crypto");
-const { createRequire } = require("node:module");
+import fs from "node:fs";
+import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
 const fromAdmin = createRequire(require.resolve("firebase-admin/auth"));
 const version = JSON.parse(
   fs.readFileSync(fromAdmin.resolve("jwks-rsa/package.json"), "utf8"),

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/firebase-esm-compat.cjs && next build",
+    "build": "node scripts/firebase-esm-compat.mjs && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -18,7 +18,7 @@
     "test:pickup": "node --import tsx --test tests/pickup.test.ts",
     "test:pickup:emulator": "node scripts/test-env.mjs ./node_modules/.bin/firebase emulators:exec --project demo-food-source --only auth,firestore \"node --import tsx --test --test-concurrency=1 tests/pickup-store.test.ts\"",
     "test:pickup:browser": "PICKUP_HOSTED_ENABLED=true node scripts/test-env.mjs ./node_modules/.bin/firebase emulators:exec --project demo-food-source --only auth \"./node_modules/.bin/playwright test tests/browser/pickup.spec.ts\"",
-    "postinstall": "node scripts/firebase-esm-compat.cjs"
+    "postinstall": "node scripts/firebase-esm-compat.mjs"
   },
   "dependencies": {
     "@js-temporal/polyfill": "^0.5.1",

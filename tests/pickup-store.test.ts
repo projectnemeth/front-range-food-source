@@ -15,7 +15,6 @@ import {
   key,
   normalize,
   type Registration,
-  type Job,
 } from "../src/lib/pickup/model";
 import {
   createPairing,
@@ -245,7 +244,7 @@ test("uncertain dispatch is never retried by a repeated check-in or worker", asy
 });
 test("prepared jobs recover after interruption and outdated source is blocked", async () => {
   await store.action(action({ action: "advance" }), "device:1");
-  let j = (await adminDb.collection("pickupJobs").get()).docs[0];
+  const j = (await adminDb.collection("pickupJobs").get()).docs[0];
   await j.ref.update({ status: "Prepared" });
   sends = 0;
   await store.reg(registration.id).update({ revision: 2 });

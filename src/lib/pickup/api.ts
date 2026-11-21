@@ -16,7 +16,7 @@ import {
   sameOrigin,
   enabled,
 } from "./auth";
-import { BUILD, PickupError, key } from "./model";
+import { BUILD, PickupError } from "./model";
 import { PickupStore, actionSchema, printer } from "./store";
 import { tabs } from "./google";
 const store = new PickupStore(adminDb);
