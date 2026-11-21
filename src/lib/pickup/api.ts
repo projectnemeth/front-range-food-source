@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z, ZodError } from "zod";
 import { adminDb } from "../firebase-admin";
+import { FirebaseConfigurationError } from "../firebase-admin-config";
 import { json, HttpError } from "../server/http";
 import {
   actor,
@@ -45,7 +46,10 @@ export function pickupFailure(error: unknown) {
   let status = 500,
     message =
       "Request failed. Saved check-ins remain recorded. Refresh before retrying.";
-  if (error instanceof PickupError) {
+  if (error instanceof FirebaseConfigurationError) {
+    status = 503;
+    message = error.message;
+  } else if (error instanceof PickupError) {
     status = error.status;
     message = error.message;
   } else if (error instanceof ZodError) {

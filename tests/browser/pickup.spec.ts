@@ -152,3 +152,71 @@ test("staff HTML is a normal page with no Apps Script iframe or Google authoriza
   expect(page.frames().length).toBe(1);
   await expect(page.getByText("DEMO", { exact: true })).toBeHidden();
 });
+
+async function mockCoordinatorSignIn(
+  page: Page,
+  sessionStatus: number,
+  sessionBody: string,
+) {
+  expect(process.env.FIREBASE_AUTH_EMULATOR_HOST).toBe("127.0.0.1:9099");
+  const email = `pickup-${Date.now()}-${Math.random().toString(16).slice(2)}@example.test`;
+  const created = await fetch(
+    "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-api-key",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        password: "FictionalPassword123!",
+        returnSecureToken: true,
+      }),
+    },
+  );
+  expect(created.ok).toBe(true);
+  let profileReads = 0;
+  await page.route("**/api/profile", async (route) => {
+    profileReads++;
+    await route.fulfill({ status: 500, body: "" });
+  });
+  await page.route("**/api/pickup/session", async (route) => {
+    await route.fulfill({
+      status: sessionStatus,
+      contentType: "application/json",
+      body: sessionBody,
+    });
+  });
+  return { email, profileReads: () => profileReads };
+}
+test("coordinator login explains empty server responses and stays on the pickup page", async ({
+  page,
+}) => {
+  const f = await mockCoordinatorSignIn(page, 500, "");
+  await page.goto("/pickup/manage");
+  await page.getByLabel("Email", { exact: true }).fill(f.email);
+  await page
+    .getByLabel("Password", { exact: true })
+    .fill("FictionalPassword123!");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "empty response (HTTP 500)",
+  );
+  await expect(page).toHaveURL(/\/pickup\/manage$/);
+  expect(f.profileReads()).toBe(0);
+});
+test("coordinator-only account signs in without a food-ordering profile", async ({
+  page,
+}) => {
+  const f = await mockCoordinatorSignIn(
+    page,
+    200,
+    JSON.stringify({ ok: true, owner: false }),
+  );
+  await page.goto("/pickup/manage");
+  await page.getByLabel("Email", { exact: true }).fill(f.email);
+  await page
+    .getByLabel("Password", { exact: true })
+    .fill("FictionalPassword123!");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Signed in.");
+  expect(f.profileReads()).toBe(0);
+});

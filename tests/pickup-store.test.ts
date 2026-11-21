@@ -458,3 +458,49 @@ test("an old never-dispatched label expires instead of printing late", async () 
   assert.equal(sends, 0);
   assert.equal((await ref.get()).data()?.status, "Failed");
 });
+
+test("coordinator login works with a role-only admin or a pickup grant and confirms its cookie", async () => {
+  const { POST: login, GET: check } =
+    await import("../src/app/api/pickup/session/route");
+  for (const [uid, role] of [
+    ["role-only-admin", "admin"],
+    ["pickup-only-coordinator", "coordinator"],
+  ]) {
+    const email = uid + "@example.test",
+      password = "FictionalPassword123!";
+    await adminAuth.createUser({ uid, email, password });
+    if (role === "admin")
+      await adminDb.doc(`users/${uid}`).set({ role: "ADMIN" });
+    else await adminDb.doc(`pickupCoordinators/${uid}`).set({ active: true });
+    const signed = await originalFetch(
+      "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake-api-key",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, returnSecureToken: true }),
+      },
+    );
+    const token = (await signed.json()).idToken;
+    assert.ok(token);
+    const response = await login(
+      new NextRequest("http://localhost/api/pickup/session", {
+        method: "POST",
+        headers: {
+          origin: "http://localhost",
+          "content-type": "application/json",
+          authorization: "Bearer " + token,
+        },
+        body: JSON.stringify({ action: "login" }),
+      }),
+    );
+    assert.equal(response.status, 200, await response.clone().text());
+    const cookie = response.headers.get("set-cookie")!.split(";")[0];
+    const confirmation = await check(
+      new NextRequest("http://localhost/api/pickup/session", {
+        headers: { Cookie: cookie },
+      }),
+    );
+    assert.equal(confirmation.status, 200);
+    assert.equal((await confirmation.json()).owner, role === "admin");
+  }
+});

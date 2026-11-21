@@ -44,7 +44,9 @@ export function hostedHtml(coordinator: boolean) {
     html.slice(0, start) +
     `      async function api(method, ...args) {
         const response = await fetch('/api/pickup', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify({method,args}), cache:'no-store'});
-        const value = await response.json();
+        let value;
+        try { value = JSON.parse(await response.text()); }
+        catch (_) { throw new Error('The pickup service returned an empty or unexpected response (HTTP ' + response.status + '). Check /api/pickup/health and reload to retry.'); }
         if (!response.ok) {
           if (String(value.error).includes('DEVICE_ACCESS_REQUIRED')) {deviceToken=null;showDeviceGate('This iPad needs a new coordinator pairing PIN.');}
           throw new Error(value.error || 'Could not reach the pickup service.');

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { adminAuth, adminDb } from "../firebase-admin";
+import { FirebaseConfigurationError } from "../firebase-admin-config";
 export class HttpError extends Error {
   constructor(
     public status: number,
@@ -14,7 +15,8 @@ export async function identity(request: Request) {
   if (!header?.startsWith("Bearer ")) throw new HttpError(401, "unauthorized");
   try {
     return await adminAuth.verifyIdToken(header.slice(7), true);
-  } catch {
+  } catch (error) {
+    if (error instanceof FirebaseConfigurationError) throw error;
     throw new HttpError(401, "unauthorized");
   }
 }
@@ -53,6 +55,11 @@ export async function json(request: Request) {
   }
 }
 export function failure(error: unknown) {
+  if (error instanceof FirebaseConfigurationError)
+    return NextResponse.json(
+      { error: error.message, code: error.code },
+      { status: 503, headers: { "Cache-Control": "private, no-store" } },
+    );
   if (error instanceof ZodError)
     return NextResponse.json(
       {

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AuthProvider } from "@/context/AuthContext";
+import ApplicationAuth from "@/components/ApplicationAuth";
 import { LanguageProvider } from "@/context/LanguageContext";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import "./globals.css";
@@ -18,14 +18,14 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <LanguageProvider>
-          <AuthProvider>
+          <ApplicationAuth>
             <main className="container mt-md">
               <div className="flex justify-end mb-md">
                 <LanguageSwitcher />
               </div>
               {children}
             </main>
-          </AuthProvider>
+          </ApplicationAuth>
         </LanguageProvider>
       </body>
     </html>

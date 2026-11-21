@@ -64,3 +64,15 @@ The report includes event ID/name, source ID/tab, name/phone/household size, Exp
 ## Verified local results
 
 The first implementation passes the existing 47 unit tests (including four hosted domain/transport tests), 16 dedicated Firebase emulator tests, two iPad-sized hosted browser tests, TypeScript checking and a Next.js production build. Google Sheets and PrintNode were mocked in integration tests; the Firestore transactions and access boundaries used the local Firebase emulator. The browser test exercised six-digit pairing, an HttpOnly cookie, reload persistence, arrival and the Previous No-Show filter. These checks do not prove physical output, real account permissions or months of Safari persistence. No live deployment or source-workbook mutation was performed.
+
+## Login recovery — hosted-2026-11-21.1
+
+A deployed session endpoint and profile endpoint were observed returning HTTP 500 with zero-byte bodies. Firebase Admin previously initialized while route modules were imported; invalid deployment credentials could bypass the route's error handler and produce that empty response. The coordinator page then attempted JSON parsing without checking the response, obscuring the actual failure.
+
+The server now initializes Firebase lazily, validates the server JSON/project match, normalizes escaped private-key newlines, and returns a structured 503 setup message for configuration failures. No private-key content is returned. `/api/pickup/health` reports the deployed build and configuration-only readiness without exposing credentials, account roles or household data. It does not verify Firestore IAM permissions or the existence/role of a specific user.
+
+The pickup coordinator page bypasses the food-order profile provider and confirms its server session after signing in. It needs either the existing ADMIN role or an active pickup coordinator grant; a food-ordering household profile is not required. Empty/non-JSON responses show the HTTP status and recovery instructions instead of a JSON parser exception. Authorization requirements have not been relaxed.
+
+After this build deploys, open `/api/pickup/health`. If it returns a setup error, follow that message in Vercel → Settings → Environment Variables → Production, save, and redeploy. FIREBASE_SERVICE_ACCOUNT_KEY must be the whole JSON object, not a path, snippet, or JSON string wrapped in extra quotes. Its project_id must match NEXT_PUBLIC_FIREBASE_PROJECT_ID. Private keys should only be supplied in the protected Vercel setting. Then sign in at `/pickup/manage` (the general `/login` route is still for the ordering application).
+
+Verification: 51 unit tests, 17 hosted Firebase emulator tests, 61 existing Firebase regression tests, four hosted browser tests, TypeScript checking, and a clean production build pass. New coverage includes malformed server settings without import crashes, safe empty-response handling, role-only admin and pickup-grant login/session cookies, and a coordinator login that makes no food-profile request. Real account login still requires correct deployment credentials and existing server-side roles.

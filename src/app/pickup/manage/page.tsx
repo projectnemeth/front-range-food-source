@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { pickupResponse } from "@/lib/pickup/client";
 export default function PickupManage() {
   const [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
@@ -24,8 +25,21 @@ export default function PickupManage() {
         },
         body: JSON.stringify({ action: "login" }),
       });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error);
+      const loginResult = await pickupResponse<{ ok: boolean }>(response);
+      if (loginResult.ok !== true)
+        throw new Error(
+          "The server did not confirm sign-in. Check server setup and retry.",
+        );
+      const session = await pickupResponse<{ owner: boolean }>(
+        await fetch("/api/pickup/session", {
+          cache: "no-store",
+          credentials: "same-origin",
+        }),
+      );
+      if (typeof session.owner !== "boolean")
+        throw new Error(
+          "The browser session could not be confirmed. Reload this production website and retry.",
+        );
       setPassword("");
       setSignedIn(true);
       setMessage("Signed in. Open coordinator tools below.");
@@ -44,8 +58,7 @@ export default function PickupManage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "grant", email: invite }),
       });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error);
+      const body = await pickupResponse<{ message: string }>(response);
       setMessage(body.message);
       setInvite("");
     } catch (e) {
@@ -59,7 +72,13 @@ export default function PickupManage() {
       <h1>Pickup coordinator access</h1>
       <p>
         Use your existing Front Range Food Source account. Volunteers only need
-        a paired iPad.
+        a paired iPad. A food-ordering profile is not required.
+      </p>
+      <p>
+        <a href="/api/pickup/health" target="_blank" rel="noreferrer">
+          Check server setup
+        </a>{" "}
+        · <a href="/forgot-password">Reset password</a>
       </p>
       <form onSubmit={login} className="flex flex-col gap-md">
         <label>
@@ -120,13 +139,23 @@ export default function PickupManage() {
           <button
             className="btn"
             onClick={async () => {
-              await fetch("/api/pickup/session", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "logout" }),
-              });
-              setSignedIn(false);
-              setMessage("Coordinator browser session ended.");
+              try {
+                await pickupResponse(
+                  await fetch("/api/pickup/session", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "logout" }),
+                  }),
+                );
+                setSignedIn(false);
+                setMessage("Coordinator browser session ended.");
+              } catch (error) {
+                setMessage(
+                  error instanceof Error
+                    ? error.message
+                    : "Could not sign out.",
+                );
+              }
             }}
           >
             Sign out of coordinator tools
