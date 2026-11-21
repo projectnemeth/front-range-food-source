@@ -32,6 +32,14 @@ export function hostedHtml(coordinator: boolean) {
     )
     .replace(/New version of both deployments/g, "Reload the hosted app")
     .replace(
+      "Creates or updates an FRFS Attendance tab in the original",
+      "Updates attendance columns on the matching dated tabs in the original",
+    )
+    .replace(
+      "Write attendance history to the FRFS Attendance tab in the original response workbook?",
+      "Update the FRFS attendance columns on the matching dated pickup tabs? Original Form answers stay intact.",
+    )
+    .replace(
       "Enable five-minute attendance sync",
       "Enable scheduled attendance sync",
     );

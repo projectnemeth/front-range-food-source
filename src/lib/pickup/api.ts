@@ -309,7 +309,7 @@ export async function pickupPost(request: NextRequest) {
         result = {
           ...(result as object),
           message:
-            "Attendance export enabled. Configure the authenticated /api/pickup/worker schedule in Vercel; sync now remains available.",
+            "Attendance export to dated pickup tabs enabled. The authenticated worker schedule is also required; Sync attendance now remains available.",
         };
         break;
       case "setupStation":

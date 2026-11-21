@@ -16,6 +16,11 @@ import {
   type PickupEvent,
 } from "./model";
 import { renderZpl_ } from "./label";
+import {
+  columnName,
+  planDatedAttendance,
+  sourceIdentity,
+} from "./dated-attendance";
 import { sheets, tabs, values, sourceId, formulaSafe, quote } from "./google";
 export const actionSchema = z
   .object({
@@ -888,6 +893,13 @@ export class PickupStore {
         "PUT",
         { values: [REPORT_HEADERS, ...rows.values()] },
       );
+      const dated = await this.exportDatedAttendance(
+        all.docs
+          .map((d) => d.data() as Registration)
+          .filter((r) => !r.inactive || r.checkedInAt),
+        events,
+        stamp,
+      );
       await this.db.runTransaction(async (tx) => {
         const current = (await tx.get(syncRef)).data();
         tx.set(
@@ -903,9 +915,96 @@ export class PickupStore {
       return {
         rows: rows.size,
         lastSync: stamp,
-        message: `Attendance saved to FRFS Attendance (${rows.size} records).`,
+        message: `Attendance saved to ${dated.tabs} dated pickup tab(s): ${dated.matched} response rows and ${dated.walkUps} walk-ups. FRFS Attendance summary also updated.`,
+        dated,
       };
     });
+  }
+  async exportDatedAttendance(
+    records: Registration[],
+    events: PickupEvent[],
+    stamp: string,
+  ) {
+    const available = await tabs(),
+      plans = [];
+    for (const event of events) {
+      const group = records.filter((r) => r.eventId === event.id);
+      if (!group.length) continue;
+      const tab = available.find((t) => t.sheetId === event.sourceSheetId);
+      if (!tab || tab.title === "FRFS Attendance")
+        throw new PickupError(
+          409,
+          `Dated source tab missing for ${event.label}. Attendance remains queued.`,
+        );
+      if (tab.rows > 2500 || tab.columns > 100)
+        throw new PickupError(
+          409,
+          "Dated attendance sync supports up to 2,500 rows and 100 columns per tab.",
+        );
+      if (
+        group.some(
+          (r) => r.sourceKind === "sheets" && r.sourceSheetId !== tab.sheetId,
+        )
+      )
+        throw new PickupError(
+          409,
+          "Registration and event source tabs do not match. Review the event mapping.",
+        );
+      const range = `A1:${columnName(tab.columns - 1)}${tab.rows}`;
+      const grid = await values(tab.title, range);
+      const plan = planDatedAttendance(tab.title, grid, group, stamp);
+      // Reject a concurrent source edit/sort before writing. Never trust imported row numbers.
+      if (
+        sourceIdentity(await values(tab.title, range), plan.column) !==
+        plan.sourceIdentity
+      )
+        throw new PickupError(
+          409,
+          `Source rows changed in ${tab.title} during sync. Retry after the edit/sort finishes.`,
+        );
+      plans.push({ tab, plan });
+    }
+    const dimensions = plans
+      .filter(
+        ({ tab, plan }) => plan.columns > tab.columns || plan.rows > tab.rows,
+      )
+      .map(({ tab, plan }) => ({
+        updateSheetProperties: {
+          properties: {
+            sheetId: tab.sheetId,
+            gridProperties: {
+              rowCount: Math.max(tab.rows, plan.rows),
+              columnCount: Math.max(tab.columns, plan.columns),
+            },
+          },
+          fields: "gridProperties(rowCount,columnCount)",
+        },
+      }));
+    if (dimensions.length)
+      await sheets(":batchUpdate", "POST", { requests: dimensions });
+    const data = plans.flatMap(({ plan }) => plan.data);
+    if (data.length)
+      await sheets("/values:batchUpdate", "POST", {
+        valueInputOption: "RAW",
+        data,
+      });
+    // A change while the request was in flight must leave export dirty for a fresh retry.
+    for (const { tab, plan } of plans) {
+      const grid = await values(
+        tab.title,
+        `A1:${columnName(Math.max(tab.columns, plan.columns) - 1)}${Math.max(tab.rows, plan.rows)}`,
+      );
+      if (sourceIdentity(grid, plan.column) !== plan.sourceIdentity)
+        throw new PickupError(
+          409,
+          `Source rows changed in ${tab.title} during sync. Attendance will retry; avoid sorting during the export.`,
+        );
+    }
+    return {
+      tabs: plans.length,
+      matched: plans.reduce((n, p) => n + p.plan.matched, 0),
+      walkUps: plans.reduce((n, p) => n + p.plan.walkUps, 0),
+    };
   }
   async worker() {
     const prepared = await this.db

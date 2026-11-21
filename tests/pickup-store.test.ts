@@ -63,6 +63,7 @@ let sends = 0,
   googleRows: unknown[][] = [],
   putRows: unknown[][] = [],
   failGoogle = false;
+let sourceGrid: unknown[][] = [];
 let attendanceExists = true;
 before(async () => {
   assert.equal(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID, "demo-food-source");
@@ -98,6 +99,11 @@ beforeEach(async () => {
   putRows = [];
   failGoogle = false;
   attendanceExists = true;
+  sourceGrid = [
+    ["", "ID#", "First & Last Name", "Phone Number", "Total in Family"],
+    ["today", "R1", "Test Household", "No phone", "4"],
+    ["today", "R2", "Second Household", "No phone", "2"],
+  ];
   await adminDb.doc(`pickupEvents/${key("sheet-12")}`).set({
     id: "sheet-12",
     label: "Saturday",
@@ -130,6 +136,28 @@ beforeEach(async () => {
       });
     if (url.startsWith("https://sheets.googleapis.com/")) {
       if (failGoogle) return Response.json({}, { status: 503 });
+      if (url.includes("/values:batchUpdate") && init?.method === "POST") {
+        const { data, valueInputOption } = JSON.parse(String(init.body));
+        assert.equal(valueInputOption, "RAW");
+        for (const write of data) {
+          const match = write.range.match(/!([A-Z]+)([0-9]+):/);
+          assert.ok(match);
+          const column =
+            [...match[1]].reduce(
+              (n, char) => n * 26 + char.charCodeAt(0) - 64,
+              0,
+            ) - 1;
+          assert.ok(column >= 5, "Never overwrite source answers");
+          write.values.forEach((row: unknown[], offset: number) => {
+            const index = Number(match[2]) - 1 + offset;
+            sourceGrid[index] ||= [];
+            row.forEach((value, i) => {
+              sourceGrid[index][column + i] = value;
+            });
+          });
+        }
+        return Response.json({});
+      }
       if (url.endsWith(":batchUpdate") && init?.method === "POST") {
         attendanceExists = true;
         return Response.json({
@@ -172,18 +200,12 @@ beforeEach(async () => {
       }
       if (decodeURIComponent(url).includes("FRFS Attendance"))
         return Response.json({ values: googleRows });
-      if (decodeURIComponent(url).includes("A1:"))
-        return Response.json({
-          values: [
-            ["", "ID#", "First & Last Name", "Phone Number", "Total in Family"],
-          ],
-        });
-      return Response.json({
-        values: [
-          ["today", "R1", "Test Household", "No phone", "4"],
-          ["today", "R2", "Second Household", "No phone", "2"],
-        ],
-      });
+      const range = decodeURIComponent(url).split("!")[1]?.split("?")[0] || "";
+      if (/^A1:[A-Z]+1$/.test(range))
+        return Response.json({ values: [sourceGrid[0]] });
+      if (range.startsWith("A1:"))
+        return Response.json({ values: structuredClone(sourceGrid) });
+      return Response.json({ values: structuredClone(sourceGrid.slice(1)) });
     }
     throw Error("Unexpected network request: " + url);
   };
@@ -332,10 +354,19 @@ test("Google import keeps a saved arrival while adding registrations, without pr
   assert.ok(r?.checkedInAt);
   assert.equal(r?.previousNoShow, true);
 });
-test("attendance export is an idempotent mirror with retained history and no source-row edits", async () => {
+test("attendance export mirrors dated tabs, preserves answers and retains summary history", async () => {
   await store.action(action({ action: "checkinOnly" }), "device:1");
   await store.exportAttendance();
   assert.equal(putRows[1][8], "Arrived");
+  assert.equal(sourceGrid[0][5], "FRFS Attendance");
+  assert.equal(sourceGrid[1][5], "Arrived");
+  assert.deepEqual(sourceGrid[1].slice(0, 5), [
+    "today",
+    "R1",
+    "Test Household",
+    "No phone",
+    "4",
+  ]);
   assert.equal(putRows[1][12], "007");
   googleRows = putRows;
   await store.addWalkIn(
@@ -417,6 +448,15 @@ test("an arrival during Google export leaves the mirror dirty for a fresh retry"
   );
   await store.exportAttendance();
   assert.equal(putRows[1][8], "Arrived");
+  assert.equal(sourceGrid[0][5], "FRFS Attendance");
+  assert.equal(sourceGrid[1][5], "Arrived");
+  assert.deepEqual(sourceGrid[1].slice(0, 5), [
+    "today",
+    "R1",
+    "Test Household",
+    "No phone",
+    "4",
+  ]);
   assert.equal(
     (await adminDb.doc("pickupSync/attendance").get()).data()?.dirty,
     false,
@@ -503,4 +543,42 @@ test("coordinator login works with a role-only admin or a pickup grant and confi
     assert.equal(confirmation.status, 200);
     assert.equal((await confirmation.json()).owner, role === "admin");
   }
+});
+
+test("the same household ID in another event cannot change this dated tab attendance", async () => {
+  await store.exportDatedAttendance(
+    [
+      registration,
+      {
+        ...registration,
+        id: "other-event-registration",
+        eventId: "sheet-13",
+        sourceSheetId: 13,
+        checkedInAt: "2026-11-21T18:00:00Z",
+      },
+    ],
+    [{ id: "sheet-12", label: "Saturday", sourceSheetId: 12, enabled: true }],
+    "now",
+  );
+  assert.equal(sourceGrid[1][5], "Expected");
+  assert.equal(sourceGrid[1][6], "");
+});
+
+test("a source sort detected before writing leaves arrivals queued without updating dated cells", async () => {
+  await store.action(action({ action: "checkinOnly" }), "device:1");
+  const fetch = globalThis.fetch;
+  let reads = 0;
+  globalThis.fetch = async (input, init) => {
+    const url = decodeURIComponent(String(input));
+    if (url.includes("'Saturday'!A1:X100") && ++reads === 2) {
+      [sourceGrid[1], sourceGrid[2]] = [sourceGrid[2], sourceGrid[1]];
+    }
+    return fetch(input, init);
+  };
+  await assert.rejects(store.exportAttendance(), /Source rows changed/);
+  assert.equal(sourceGrid[0][5], undefined);
+  assert.equal(
+    (await adminDb.doc("pickupSync/attendance").get()).data()?.dirty,
+    true,
+  );
 });
