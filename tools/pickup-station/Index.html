@@ -1431,6 +1431,17 @@
         };
         return messages[job.providerState] || "No service status checked yet.";
       }
+      function householdOrder(a, b) {
+        if ($("filter").value === "arrived") {
+          const number = (r) =>
+            /^\d+$/.test(String(r.arrival?.number ?? ""))
+              ? Number(r.arrival.number)
+              : Infinity;
+          const difference = number(a) - number(b);
+          if (difference) return difference;
+        }
+        return a.name.localeCompare(b.name);
+      }
       function visible() {
         const q = fold($("search").value.trim()),
           digits = q.replace(/\D/g, ""),
@@ -1989,7 +2000,7 @@
         $("selectionInfo").textContent = selected.size + " selected";
         $("list").replaceChildren();
         visible()
-          .sort((a, b) => a.name.localeCompare(b.name))
+          .sort(householdOrder)
           .forEach((r) => {
             const row = el(
                 "div",

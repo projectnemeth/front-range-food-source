@@ -328,3 +328,50 @@ test("a walk-up box given without a label is saved offline and reported after re
   await expect(page.locator("#outbox")).toBeHidden();
   expect(f.sends()).toBe(0);
 });
+
+test("all and expected families are alphabetical; arrived families sort numerically by vehicle", async ({
+  page,
+}) => {
+  await fixture(page);
+  const households = [
+    { name: "Zulu", number: "002", arrived: true },
+    { name: "Alpha", number: "010", arrived: true },
+    { name: "Beta", number: undefined, arrived: true },
+    { name: "Echo", number: undefined, arrived: false },
+    { name: "Delta", number: undefined, arrived: false },
+  ].map((r, i) => ({
+    id: String(i),
+    eventId: "event",
+    name: r.name,
+    phone: "No phone",
+    phoneSearch: "",
+    householdSize: 2,
+    revision: 1,
+    errors: [],
+    jobs: [],
+    lastJob: null,
+    checkedInAt: r.arrived ? "2026-11-22T18:00:00Z" : null,
+    arrival: r.number ? { number: r.number, line: "blue" } : null,
+  }));
+  await page.route("**/api/pickup", async (route) => {
+    if (route.request().postDataJSON().method === "listRegistrations")
+      await route.fulfill({ json: households });
+    else await route.fallback();
+  });
+  await page.goto("/pickup");
+  await page.getByLabel("Setup PIN").fill("123456");
+  await page.getByRole("button", { name: "Authorize this iPad" }).click();
+  const names = () =>
+    page
+      .locator("#list button.person")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => node.firstChild?.textContent),
+      );
+  await expect.poll(names).toEqual(["Alpha", "Beta", "Delta", "Echo", "Zulu"]);
+  await page.getByLabel("Show households").selectOption("expected");
+  await expect.poll(names).toEqual(["Delta", "Echo"]);
+  await page.getByLabel("Show households").selectOption("arrived");
+  await expect.poll(names).toEqual(["Zulu", "Alpha", "Beta"]);
+  await page.getByLabel("Show households").selectOption("all");
+  await expect.poll(names).toEqual(["Alpha", "Beta", "Delta", "Echo", "Zulu"]);
+});
