@@ -1436,8 +1436,8 @@
           const number = (r) =>
             /^\d+$/.test(String(r.arrival?.number ?? ""))
               ? Number(r.arrival.number)
-              : Infinity;
-          const difference = number(a) - number(b);
+              : -Infinity;
+          const difference = number(b) - number(a);
           if (difference) return difference;
         }
         return a.name.localeCompare(b.name);

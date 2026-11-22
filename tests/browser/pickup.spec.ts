@@ -329,7 +329,7 @@ test("a walk-up box given without a label is saved offline and reported after re
   expect(f.sends()).toBe(0);
 });
 
-test("all and expected families are alphabetical; arrived families sort numerically by vehicle", async ({
+test("all and expected families are alphabetical; arrived families sort by descending vehicle number", async ({
   page,
 }) => {
   await fixture(page);
@@ -371,7 +371,7 @@ test("all and expected families are alphabetical; arrived families sort numerica
   await page.getByLabel("Show households").selectOption("expected");
   await expect.poll(names).toEqual(["Delta", "Echo"]);
   await page.getByLabel("Show households").selectOption("arrived");
-  await expect.poll(names).toEqual(["Zulu", "Alpha", "Beta"]);
+  await expect.poll(names).toEqual(["Alpha", "Zulu", "Beta"]);
   await page.getByLabel("Show households").selectOption("all");
   await expect.poll(names).toEqual(["Alpha", "Beta", "Delta", "Echo", "Zulu"]);
 });
