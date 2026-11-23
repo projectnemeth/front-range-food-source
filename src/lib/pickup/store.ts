@@ -23,6 +23,7 @@ import {
   sourceIdentity,
   DATED_HEADERS,
   LOOKUP_TAB,
+  LOOKUP_VERSION,
   LOOKUP_HEADERS,
   ROW_KEY,
   LOOKUP_KEY,
@@ -945,6 +946,7 @@ export class PickupStore {
           syncRef,
           {
             lastSync: stamp,
+            lookupVersion: LOOKUP_VERSION,
             lastError: dated.retryRequired ? dated.warnings.join(" ") : null,
             lastWarning: dated.warnings.join(" ") || null,
             dirty:
@@ -1249,9 +1251,15 @@ export class PickupStore {
   async syncAttendance() {
     const ref = this.db.doc("pickupSync/attendance");
     const sync = (await ref.get()).data();
-    if (sync?.enabled === false || !sync?.dirty) return "not pending";
+    if (sync?.enabled === false) return "not pending";
+    const upgrading = sync?.lookupVersion !== LOOKUP_VERSION;
+    if (!sync?.dirty && !upgrading) return "not pending";
     // Batch busy car-line arrivals; list refreshes/worker retry the retained dirty flag.
-    if (sync.lastSync && Date.now() - Date.parse(sync.lastSync) < 30000)
+    if (
+      !upgrading &&
+      sync?.lastSync &&
+      Date.now() - Date.parse(sync.lastSync) < 30000
+    )
       return "waiting for next refresh";
     try {
       // A second pass catches arrivals made while the first snapshot was exporting.

@@ -1,3 +1,4 @@
+import { LOOKUP_VERSION } from "../src/lib/pickup/dated-attendance";
 import { displayGrid, applyCells } from "./helpers/pickup-sheet";
 import { test, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
@@ -661,7 +662,11 @@ test("enabled pickup events default to the newest dated tab", async () => {
 test("automatic attendance batches recent changes without clearing pending walk-ups", async () => {
   await adminDb
     .doc("pickupSync/attendance")
-    .set({ dirty: true, lastSync: new Date().toISOString() });
+    .set({
+      dirty: true,
+      lastSync: new Date().toISOString(),
+      lookupVersion: LOOKUP_VERSION,
+    });
   assert.equal(await store.syncAttendance(), "waiting for next refresh");
   assert.equal(
     (await adminDb.doc("pickupSync/attendance").get()).data()?.dirty,
@@ -679,14 +684,12 @@ test("an archived missing source tab cannot block attendance for the current pic
     checkedInAt: "2026-10-17T18:00:00Z",
   };
   await store.reg(old.id).set(old);
-  await adminDb
-    .doc(`pickupEvents/${key("archived")}`)
-    .set({
-      id: "archived",
-      label: "Oct 17",
-      sourceSheetId: 999,
-      enabled: false,
-    });
+  await adminDb.doc(`pickupEvents/${key("archived")}`).set({
+    id: "archived",
+    label: "Oct 17",
+    sourceSheetId: 999,
+    enabled: false,
+  });
   await store.action(action({ action: "checkinOnly" }), "device:1");
   const result = await store.exportAttendance();
   assert.equal(displayed()[1][5], "Arrived");
@@ -698,22 +701,18 @@ test("an archived missing source tab cannot block attendance for the current pic
   );
 });
 test("a missing active tab leaves a visible retry warning while other events still export", async () => {
-  await store
-    .reg("walkin:missing")
-    .set({
-      ...registration,
-      id: "walkin:missing",
-      eventId: "missing",
-      sourceKind: "walkin",
-    });
-  await adminDb
-    .doc(`pickupEvents/${key("missing")}`)
-    .set({
-      id: "missing",
-      label: "Missing pickup",
-      sourceSheetId: 999,
-      enabled: true,
-    });
+  await store.reg("walkin:missing").set({
+    ...registration,
+    id: "walkin:missing",
+    eventId: "missing",
+    sourceKind: "walkin",
+  });
+  await adminDb.doc(`pickupEvents/${key("missing")}`).set({
+    id: "missing",
+    label: "Missing pickup",
+    sourceSheetId: 999,
+    enabled: true,
+  });
   await store.action(action({ action: "checkinOnly" }), "device:1");
   const result = await store.exportAttendance();
   assert.equal(displayed()[1][5], "Arrived");
@@ -774,4 +773,17 @@ test("legacy pickup dates are anchored to event creation, rather than changing e
     }).format(created),
   );
   assert.equal(event.pickupDate, `${year}-10-17`);
+});
+
+test("the first post-deployment refresh upgrades clean legacy attendance without needing a new arrival", async () => {
+  await adminDb
+    .doc("pickupSync/attendance")
+    .set({ dirty: false, lastSync: new Date().toISOString() });
+  assert.equal(await store.syncAttendance(), "synced");
+  assert.equal(
+    (await adminDb.doc("pickupSync/attendance").get()).data()?.lookupVersion,
+    LOOKUP_VERSION,
+  );
+  assert.equal(displayed()[0].includes("FRFS Lookup Row"), true);
+  assert.equal(await store.syncAttendance(), "not pending");
 });

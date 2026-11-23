@@ -44,6 +44,7 @@ function cells(r: Registration, stamp: string, status?: string): unknown[] {
       : "No",
   ];
 }
+export const LOOKUP_VERSION = "stable-id-2026-11-23";
 export const LOOKUP_TAB = "FRFS Attendance Data";
 export const ROW_KEY = "FRFS Row Key";
 export const LOOKUP_KEY = "FRFS Lookup Key";
