@@ -55,6 +55,13 @@ async function fixture(page: Page) {
     else if (method === "listRegistrations") value = records;
     else if (method === "requestAction") {
       const q = args[0];
+      if (q.revision !== records[0].revision) {
+        await route.fulfill({
+          status: 409,
+          json: { error: "Registration changed. Refresh and review it." },
+        });
+        return;
+      }
       sends++;
       const r = records[0] as (typeof records)[0] & {
         checkedInAt?: string;
@@ -119,7 +126,7 @@ async function fixture(page: Page) {
       body: JSON.stringify(value),
     });
   });
-  return { sends: () => sends };
+  return { sends: () => sends, records };
 }
 test("iPad pairs once, reloads with a private cookie, and filters a previous no-show check-in", async ({
   page,
@@ -374,4 +381,44 @@ test("all and expected families are alphabetical; arrived families sort by desce
   await expect.poll(names).toEqual(["Alpha", "Zulu", "Beta"]);
   await page.getByLabel("Show households").selectOption("all");
   await expect.poll(names).toEqual(["Alpha", "Beta", "Delta", "Echo", "Zulu"]);
+});
+
+test("an offline check-in can review an updated registration and retry with the same token", async ({
+  page,
+  context,
+}) => {
+  const f = await fixture(page),
+    tokens: string[] = [],
+    revisions: number[] = [];
+  await page.route("**/api/pickup", async (route) => {
+    const body = route.request().postDataJSON();
+    if (body.method === "requestAction") {
+      tokens.push(body.args[0].token);
+      revisions.push(body.args[0].revision);
+    }
+    await route.fallback();
+  });
+  await readyForCheckin(page);
+  await context.setOffline(true);
+  await page
+    .getByRole("button", { name: "Check in to Blue line & print", exact: true })
+    .click();
+  await expect(page.locator("#outbox")).toContainText("1 check-in(s)");
+  f.records[0].revision = 2;
+  f.records[0].householdSize = 5;
+  await context.setOffline(false);
+  const retry = page.getByRole("button", {
+    name: "Review & retry Fictional Household",
+    exact: true,
+  });
+  await expect(retry).toBeVisible();
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("5 people");
+    await dialog.accept();
+  });
+  await retry.click();
+  await expect.poll(f.sends).toBe(1);
+  await expect(page.locator("#outbox")).toBeHidden();
+  expect(revisions).toEqual([1, 2]);
+  expect(new Set(tokens).size).toBe(1);
 });

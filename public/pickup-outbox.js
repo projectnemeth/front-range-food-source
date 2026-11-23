@@ -178,15 +178,24 @@
           }
         );
       },
-      async retry(token) {
+      async retry(token, review = {}) {
         await safe(reload);
         const entry = entries.find((e) => e.token === token);
         if (!entry || entry.owner !== owner)
           throw Error(
             "This request belongs to a different iPad authorization. Ask the coordinator to reconcile it.",
           );
+        const request = { ...entry.request };
+        if (entry.method === "requestAction" && review.revision !== undefined) {
+          if (!Number.isSafeInteger(review.revision) || review.revision < 1)
+            throw Error(
+              "Refresh and review the current registration before retrying.",
+            );
+          request.revision = review.revision;
+        }
         await put({
           ...entry,
+          request,
           state: "waiting",
           error: "",
           confirmedAt: now(),

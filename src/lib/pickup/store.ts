@@ -1,4 +1,4 @@
-import { newestPickupEvents } from "./event-order";
+import { newestPickupEvents, dateForPickup, pickupYear } from "./event-order";
 import { randomUUID } from "node:crypto";
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import { z } from "zod";
@@ -21,6 +21,15 @@ import {
   columnName,
   planDatedAttendance,
   sourceIdentity,
+  DATED_HEADERS,
+  LOOKUP_TAB,
+  LOOKUP_HEADERS,
+  ROW_KEY,
+  LOOKUP_KEY,
+  LOOKUP_ROW,
+  rowFormulas,
+  lookupTable,
+  enteredCell,
 } from "./dated-attendance";
 import { sheets, tabs, values, sourceId, formulaSafe, quote } from "./google";
 export const actionSchema = z
@@ -86,7 +95,18 @@ export class PickupStore {
   async events() {
     return newestPickupEvents(
       (await this.db.collection("pickupEvents").get()).docs
-        .map((d) => d.data() as PickupEvent)
+        .map((d) => {
+          const event = d.data() as PickupEvent;
+          return {
+            ...event,
+            pickupDate:
+              event.pickupDate ||
+              dateForPickup(
+                event.sourceTitle || event.label,
+                pickupYear(d.createTime.toDate()),
+              ),
+          };
+        })
         .filter((e) => e.enabled),
       Number(
         new Intl.DateTimeFormat("en-US", {
@@ -528,17 +548,27 @@ export class PickupStore {
       })
       .parse(input);
     const found = (await tabs()).find((t) => t.sheetId === q.sourceSheetId);
-    if (!found || found.title === "FRFS Attendance")
+    if (!found || ["FRFS Attendance", LOOKUP_TAB].includes(found.title))
       throw new PickupError(409, "Choose a source pickup tab.");
     const event: PickupEvent = {
       id: `sheet-${q.sourceSheetId}`,
       label: q.label,
+      sourceTitle: found.title,
       sourceSheetId: q.sourceSheetId,
       enabled: true,
     };
     await this.db.runTransaction(async (tx) => {
       const ref = this.db.doc("pickupSettings/config"),
         config = (await tx.get(ref)).data();
+      const eventRef = this.db.doc(`pickupEvents/${key(event.id)}`);
+      const prior = await tx.get(eventRef);
+      const pickupDate =
+        prior.data()?.pickupDate ||
+        dateForPickup(
+          found.title,
+          pickupYear(prior.createTime?.toDate() || new Date()),
+        );
+      if (pickupDate) event.pickupDate = pickupDate;
       if (String(config?.version || 0) !== q.configVersion)
         throw new PickupError(
           409,
@@ -915,8 +945,10 @@ export class PickupStore {
           syncRef,
           {
             lastSync: stamp,
-            lastError: null,
-            dirty: (current?.generation || 0) !== generation,
+            lastError: dated.retryRequired ? dated.warnings.join(" ") : null,
+            lastWarning: dated.warnings.join(" ") || null,
+            dirty:
+              (current?.generation || 0) !== generation || dated.retryRequired,
           },
           { merge: true },
         );
@@ -924,7 +956,7 @@ export class PickupStore {
       return {
         rows: rows.size,
         lastSync: stamp,
-        message: `Attendance saved to ${dated.tabs} dated pickup tab(s): ${dated.matched} response rows and ${dated.walkUps} walk-ups. FRFS Attendance summary also updated.`,
+        message: `Attendance saved to ${dated.tabs} dated pickup tab(s): ${dated.matched} response rows and ${dated.walkUps} walk-ups. FRFS Attendance summary also updated.${dated.warnings.length ? " " + dated.warnings.join(" ") : ""}`,
         dated,
       };
     });
@@ -935,15 +967,24 @@ export class PickupStore {
     stamp: string,
   ) {
     const available = await tabs(),
-      plans = [];
+      plans = [],
+      warnings: string[] = [];
+    let retryRequired = false;
     for (const event of events) {
       const group = records.filter((r) => r.eventId === event.id);
       if (!group.length) continue;
       const tab = available.find((t) => t.sheetId === event.sourceSheetId);
-      if (!tab || tab.title === "FRFS Attendance")
+      if (!tab) {
+        warnings.push(
+          `Source tab missing for ${event.label}; its history is retained in FRFS Attendance.`,
+        );
+        if (event.enabled) retryRequired = true;
+        continue;
+      }
+      if (["FRFS Attendance", LOOKUP_TAB].includes(tab.title))
         throw new PickupError(
           409,
-          `Dated source tab missing for ${event.label}. Attendance remains queued.`,
+          "Choose an original dated response tab for attendance.",
         );
       if (tab.rows > 2500 || tab.columns > 100)
         throw new PickupError(
@@ -961,7 +1002,13 @@ export class PickupStore {
         );
       const range = `A1:${columnName(tab.columns - 1)}${tab.rows}`;
       const grid = await values(tab.title, range);
-      const plan = planDatedAttendance(tab.title, grid, group, stamp);
+      const plan = planDatedAttendance(
+        tab.title,
+        grid,
+        group,
+        stamp,
+        tab.sheetId,
+      );
       // Reject a concurrent source edit/sort before writing. Never trust imported row numbers.
       if (
         sourceIdentity(await values(tab.title, range), plan.column) !==
@@ -971,32 +1018,205 @@ export class PickupStore {
           409,
           `Source rows changed in ${tab.title} during sync. Retry after the edit/sort finishes.`,
         );
-      plans.push({ tab, plan });
+      plans.push({ tab, plan, headers: grid[0] || [] });
     }
-    const dimensions = plans
-      .filter(
-        ({ tab, plan }) => plan.columns > tab.columns || plan.rows > tab.rows,
+    let ledgerTab = available.find((t) => t.title === LOOKUP_TAB);
+    if (!ledgerTab) {
+      const created = await sheets(":batchUpdate", "POST", {
+        requests: [
+          {
+            addSheet: {
+              properties: {
+                title: LOOKUP_TAB,
+                hidden: true,
+                gridProperties: {
+                  rowCount: 10002,
+                  columnCount: LOOKUP_HEADERS.length,
+                },
+              },
+            },
+          },
+        ],
+      });
+      const sheetId = created.replies?.[0]?.addSheet?.properties?.sheetId;
+      if (!Number.isInteger(sheetId))
+        throw new PickupError(
+          503,
+          "Google did not confirm the attendance lookup tab.",
+        );
+      ledgerTab = {
+        sheetId,
+        title: LOOKUP_TAB,
+        rows: 10002,
+        columns: LOOKUP_HEADERS.length,
+      };
+    } else {
+      const header = (await values(LOOKUP_TAB, `A1:S1`))[0] || [];
+      if (
+        header.length &&
+        JSON.stringify(header) !== JSON.stringify(LOOKUP_HEADERS)
       )
-      .map(({ tab, plan }) => ({
+        throw new PickupError(
+          409,
+          "The attendance data tab has incompatible headers; no dated attendance was changed.",
+        );
+    }
+    const ledger = lookupTable(plans.map((p) => p.plan));
+    if (ledger.length > 10002)
+      throw new PickupError(409, "Attendance lookup exceeds 10,000 rows.");
+    const requests: object[] = [];
+    if (
+      ledger.length > ledgerTab.rows ||
+      ledgerTab.columns < LOOKUP_HEADERS.length
+    )
+      requests.push({
         updateSheetProperties: {
           properties: {
-            sheetId: tab.sheetId,
+            sheetId: ledgerTab.sheetId,
             gridProperties: {
-              rowCount: Math.max(tab.rows, plan.rows),
-              columnCount: Math.max(tab.columns, plan.columns),
+              rowCount: Math.max(ledgerTab.rows, ledger.length),
+              columnCount: Math.max(ledgerTab.columns, LOOKUP_HEADERS.length),
             },
           },
           fields: "gridProperties(rowCount,columnCount)",
         },
-      }));
-    if (dimensions.length)
-      await sheets(":batchUpdate", "POST", { requests: dimensions });
-    const data = plans.flatMap(({ plan }) => plan.data);
-    if (data.length)
-      await sheets("/values:batchUpdate", "POST", {
-        valueInputOption: "RAW",
-        data,
       });
+    // Clear old ledger values in this same atomic batch, preventing stale entries from winning a lookup.
+    requests.push({
+      repeatCell: {
+        range: {
+          sheetId: ledgerTab.sheetId,
+          startRowIndex: 0,
+          endRowIndex: Math.max(ledgerTab.rows, ledger.length),
+          startColumnIndex: 0,
+          endColumnIndex: LOOKUP_HEADERS.length,
+        },
+        cell: {},
+        fields: "userEnteredValue",
+      },
+    });
+    requests.push({
+      updateCells: {
+        start: { sheetId: ledgerTab.sheetId, rowIndex: 0, columnIndex: 0 },
+        rows: ledger.map((row, i) => ({
+          values: row.map((value, j) =>
+            enteredCell(
+              value,
+              i > 0 && j === 0 && String(value).startsWith("="),
+            ),
+          ),
+        })),
+        fields: "userEnteredValue",
+      },
+    });
+    for (const { tab, plan, headers } of plans) {
+      if (plan.columns > tab.columns)
+        requests.push({
+          updateSheetProperties: {
+            properties: {
+              sheetId: tab.sheetId,
+              gridProperties: { columnCount: plan.columns },
+            },
+            fields: "gridProperties.columnCount",
+          },
+        });
+      // Capture legacy walk-up identities at their CURRENT rows atomically before replacing old values.
+      if (plan.migrateKeys && plan.rows > 1)
+        requests.push({
+          copyPaste: {
+            source: {
+              sheetId: tab.sheetId,
+              startRowIndex: 1,
+              endRowIndex: plan.rows,
+              startColumnIndex: plan.column + 11,
+              endColumnIndex: plan.column + 12,
+            },
+            destination: {
+              sheetId: tab.sheetId,
+              startRowIndex: 1,
+              endRowIndex: plan.rows,
+              startColumnIndex: plan.keyColumn,
+              endColumnIndex: plan.keyColumn + 1,
+            },
+            pasteType: "PASTE_VALUES",
+          },
+        });
+      const write = (
+        column: number,
+        row: number,
+        rows: unknown[][],
+        formulas = false,
+      ) =>
+        requests.push({
+          updateCells: {
+            start: { sheetId: tab.sheetId, rowIndex: row, columnIndex: column },
+            rows: rows.map((r) => ({
+              values: r.map((v) => enteredCell(v, formulas)),
+            })),
+            fields: "userEnteredValue",
+          },
+        });
+      write(plan.column, 0, [DATED_HEADERS]);
+      write(plan.keyColumn, 0, [[ROW_KEY]]);
+      write(plan.lookupColumn, 0, [[LOOKUP_KEY]]);
+      write(plan.rowColumn, 0, [[LOOKUP_ROW]]);
+      for (const index of [plan.keyColumn, plan.lookupColumn, plan.rowColumn])
+        requests.push({
+          updateDimensionProperties: {
+            range: {
+              sheetId: tab.sheetId,
+              dimension: "COLUMNS",
+              startIndex: index,
+              endIndex: index + 1,
+            },
+            properties: { hiddenByUser: true },
+            fields: "hiddenByUser",
+          },
+        });
+      const formulas = rowFormulas(plan, headers, tab.sheetId, ledger.length);
+      write(
+        plan.column,
+        1,
+        Array.from({ length: plan.rows - 1 }, () => formulas.fields),
+        true,
+      );
+      write(
+        plan.lookupColumn,
+        1,
+        Array.from({ length: plan.rows - 1 }, () => [formulas.lookup]),
+        true,
+      );
+      write(
+        plan.rowColumn,
+        1,
+        Array.from({ length: plan.rows - 1 }, () => [formulas.lookupRow]),
+        true,
+      );
+      if (plan.appendWalkUps.length) {
+        const rows = plan.appendWalkUps.map((r) => {
+          const cells: object[] = Array.from(
+            { length: plan.columns },
+            () => ({}),
+          );
+          formulas.fields.forEach((formula, i) => {
+            cells[plan.column + i] = enteredCell(formula, true);
+          });
+          cells[plan.keyColumn] = enteredCell(r.id);
+          cells[plan.lookupColumn] = enteredCell(formulas.lookup, true);
+          cells[plan.rowColumn] = enteredCell(formulas.lookupRow, true);
+          return { values: cells };
+        });
+        // appendCells allocates new rows on Google's side; a concurrent sort cannot overwrite another family.
+        requests.push({
+          appendCells: {
+            sheetId: tab.sheetId,
+            rows,
+            fields: "userEnteredValue",
+          },
+        });
+      }
+    }
+    await sheets(":batchUpdate", "POST", { requests });
     // A change while the request was in flight must leave export dirty for a fresh retry.
     for (const { tab, plan } of plans) {
       const grid = await values(
@@ -1011,6 +1231,8 @@ export class PickupStore {
     }
     return {
       tabs: plans.length,
+      warnings,
+      retryRequired,
       matched: plans.reduce((n, p) => n + p.plan.matched, 0),
       walkUps: plans.reduce((n, p) => n + p.plan.walkUps, 0),
     };
@@ -1037,7 +1259,7 @@ export class PickupStore {
         await this.exportAttendance();
         if (!(await ref.get()).data()?.dirty) break;
       }
-      return "synced";
+      return (await ref.get()).data()?.dirty ? "retry pending" : "synced";
     } catch (error) {
       if (
         error instanceof PickupError &&

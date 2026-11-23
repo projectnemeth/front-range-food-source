@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import {
   newestPickupEvents,
   pickupTabDate,
+  pickupYear,
 } from "../src/lib/pickup/event-order";
 const script = readFileSync("public/pickup-outbox.js", "utf8");
 const request = {
@@ -214,4 +215,56 @@ test("an already supplied box can sync after a long outage without creating a la
   await client.flush();
   assert.deepEqual(f.attempts[0], walkup);
   assert.equal(f.data.size, 0);
+});
+
+test("reviewing a refreshed registration updates its revision and keeps the original idempotency token", async () => {
+  const f = fixture(),
+    client = f.make();
+  await client.bind("ipad");
+  f.connect();
+  const sent: { revision: number; token: string }[] = [];
+  f.transport(async (_method, input) => {
+    const value = input as { revision: number; token: string };
+    sent.push({ ...value });
+    if (value.revision !== 2)
+      throw Object.assign(Error("Registration changed"), { status: 409 });
+    return ack;
+  });
+  await client.submit("requestAction", { ...request, revision: 1 }, context);
+  assert.equal(f.data.get(request.token).state, "review");
+  await client.retry(request.token, { revision: 2 });
+  assert.equal(f.data.size, 0);
+  assert.deepEqual(
+    sent.map((q) => q.revision),
+    [1, 2],
+  );
+  assert.deepEqual(
+    sent.map((q) => q.token),
+    [request.token, request.token],
+  );
+});
+test("immutable pickup dates prevent yearless historical labels from jumping ahead at New Year", () => {
+  const events = [
+    {
+      id: "old",
+      label: "Oct 17",
+      pickupDate: "2026-10-17",
+      sourceSheetId: 1,
+      enabled: true,
+    },
+    {
+      id: "new",
+      label: "January pickup",
+      pickupDate: "2027-01-02",
+      sourceSheetId: 2,
+      enabled: true,
+    },
+  ];
+  assert.equal(newestPickupEvents(events, 2027)[0].id, "new");
+  assert.equal(newestPickupEvents(events, 2028)[0].id, "new");
+});
+
+test("yearless date anchoring uses the Denver year at the UTC year boundary", () => {
+  assert.equal(pickupYear(new Date("2027-01-01T01:00:00Z")), 2026);
+  assert.equal(pickupYear(new Date("2027-01-01T09:00:00Z")), 2027);
 });

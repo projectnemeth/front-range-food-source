@@ -2,6 +2,9 @@ import type { PickupEvent } from "./model";
 // Parse explicit tab dates rather than relying on Firestore document order or host Date parsing.
 export function pickupTabDate(label: string, fallbackYear: number): number {
   let month: number, day: number, year: number;
+  const iso = label.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso)
+    return pickupTabDate(iso[2] + "/" + iso[3] + "/" + iso[1], fallbackYear);
   const numeric = label
     .trim()
     .match(/^(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2}|\d{4}))?$/);
@@ -43,7 +46,22 @@ export function newestPickupEvents(
 ): PickupEvent[] {
   return [...events].sort(
     (a, b) =>
-      pickupTabDate(b.label, year) - pickupTabDate(a.label, year) ||
+      pickupTabDate(b.pickupDate || b.sourceTitle || b.label, year) -
+        pickupTabDate(a.pickupDate || a.sourceTitle || a.label, year) ||
       b.sourceSheetId - a.sourceSheetId,
+  );
+}
+
+export function dateForPickup(title: string, year: number): string | undefined {
+  const value = pickupTabDate(title, year);
+  return value < 0 ? undefined : new Date(value).toISOString().slice(0, 10);
+}
+
+export function pickupYear(date: Date): number {
+  return Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Denver",
+      year: "numeric",
+    }).format(date),
   );
 }

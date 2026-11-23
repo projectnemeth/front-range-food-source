@@ -228,7 +228,8 @@ export async function pickupPost(request: NextRequest) {
           ok: !attendance?.lastError,
           detail:
             attendance?.lastError ||
-            `Last export: ${attendance?.lastSync || "never"}. Automatic export ${attendance?.enabled !== false ? "enabled" : "paused"}. ${attendance?.dirty ? "Changes waiting to sync." : "Up to date."}`,
+            (attendance?.lastWarning ? attendance.lastWarning + " " : "") +
+              `Last export: ${attendance?.lastSync || "never"}. Automatic export ${attendance?.enabled !== false ? "enabled" : "paused"}. ${attendance?.dirty ? "Changes waiting to sync." : "Up to date."}`,
         });
         const events = await store.events();
         if (!events.length)
@@ -245,7 +246,10 @@ export async function pickupPost(request: NextRequest) {
               ?.version || 0,
           ),
           checks,
-          tabs: sourceTabs.filter((t) => t.title !== "FRFS Attendance"),
+          tabs: sourceTabs.filter(
+            (t) =>
+              !["FRFS Attendance", "FRFS Attendance Data"].includes(t.title),
+          ),
           events,
           lastChange: null,
         };

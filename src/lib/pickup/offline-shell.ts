@@ -26,8 +26,20 @@ export const offlineShell = String.raw`
             row.append(el('p',entry.error));
             const retry = el('button', 'Review & retry ' + entry.name);
             retry.onclick = async () => {
-              if (!confirm('Confirm ' + entry.name + ' is still waiting for ' + entry.eventLabel + ', car #' + entry.request.arrival.number + '. Ask packing staff about any existing label before continuing. Retry the original saved request?')) return;
-              try { await outbox.retry(entry.token); await quietRefresh(); } catch (e) {note(e.message,true);}
+              try {
+                let review = {}, details = entry.name;
+                if (entry.method === 'requestAction') {
+                  const latest = await rawPickupApi('listRegistrations', entry.eventId);
+                  const household = latest.find(r => r.id === entry.request.id);
+                  if (!household) throw new Error('This registration is no longer available. Ask a coordinator to reconcile the saved check-in.');
+                  if (!household.checkedInAt && (household.reviewRequired || (entry.request.action === 'checkin' && household.errors.length)))
+                    throw new Error('A coordinator must resolve the current registration issues before this check-in can be retried.');
+                  review.revision = household.revision;
+                  details = household.name + ' · ' + household.phone + ' · ' + household.householdSize + ' people';
+                }
+                if (!confirm('Review current registration: ' + details + '. Pickup: ' + entry.eventLabel + ', car #' + entry.request.arrival.number + ', ' + entry.request.arrival.line + ' line. Confirm these details and that the household still needs check-in. Ask packing staff about any existing label. Retry the saved request?')) return;
+                await outbox.retry(entry.token, review); await quietRefresh();
+              } catch (e) {note(e.message,true);}
             };
             row.append(retry);
           } else row.append(el('p',entry.error || 'Waiting for a server confirmation.'));

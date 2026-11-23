@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-export const BUILD = "hosted-2026-11-22.2";
+export const BUILD = "hosted-2026-11-23.1";
 export const key = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 export const clean = (value: unknown) =>
@@ -74,6 +74,8 @@ export interface PickupEvent {
   id: string;
   label: string;
   sourceSheetId: number;
+  pickupDate?: string;
+  sourceTitle?: string;
   enabled: boolean;
 }
 export interface Job {
